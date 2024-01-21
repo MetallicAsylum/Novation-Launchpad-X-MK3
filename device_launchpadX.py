@@ -126,14 +126,16 @@ class LaunchpadX():
                 return
 
     def OnNoteOn(self, event):
+        print(event.midiChan)
         if self.currentScreen in [0, 13]: #Session Mode
             if self.FLCurrentWindow == 0 and not self.isInPlugin: #Mixer
                 mixerModule.OnControlChange(event)
                 event.handled = True
-            if self.mixerPluginName == "Gross Beat":
+            if self.mixerPluginName == "Gross Beat" and event.midiChan != 8: #Gross Beat
+                print(event.midiChan, "got!")
                 grossBeatModule.OnNoteOn(event)
             return
-        if self.channelPluginName == "FPC": #FPC
+        if self.channelPluginName == "FPC" and event.midiChan == 8: #FPC
             FPCModule.OnNoteOn(event)
             return
         if playlist.getPerformanceModeState() == 1 and self.currentScreen == 1 and self.FLCurrentWindow == 2: #Performance Mode
@@ -169,7 +171,7 @@ class LaunchpadX():
                 else:
                     device.midiOutMsg(176, 144, 98, 0)
         if (flags == 4096 or flags == 4352):
-            if ui.getFocusedPluginName() == "Gross Beat":
+            if ui.getFocusedPluginName() == "Gross Beat" and self.currentScreen == 0:
                 grossBeatModule.updateSlots()
         if (flags == 17687) and self.FLCurrentWindow == 0 and not self.isInPlugin: #Plugin on Mixer Change
             mixerModule.updatePluginScrollArrows(0)

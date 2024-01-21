@@ -43,6 +43,8 @@ class PluginFPC():
         self.updatePadsColor(chanIndex)
         
     def updateArrows(self, currentScreen):
+        device.midiOutMsg(176, 144, 91, 0)
+        device.midiOutMsg(176, 144, 92, 0)
         if currentScreen == 1 or currentScreen == None:
             device.midiOutMsg(176, 144, 93, 1)
             device.midiOutMsg(176, 144, 94, 1)  
@@ -151,8 +153,6 @@ class PluginGrossBeat():
         self.updateSlots()
 
     def updateSlots(self):
-        print("param time:", plugins.getParamValue(0, self.mixerIndex, self.slotIndex))
-        print("param vol:", plugins.getParamValue(1, self.mixerIndex, self.slotIndex))
         timeSlot = round(plugins.getParamValue(0, self.mixerIndex, self.slotIndex)/0.02857)
         volSlot = round(plugins.getParamValue(1, self.mixerIndex, self.slotIndex)/0.02857)
         offset = 10 if self.viewDown else 0
