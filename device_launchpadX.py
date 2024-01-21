@@ -41,8 +41,8 @@ class LaunchpadX():
 
         self.FLCurrentWindow = -1 #FL Window Constants, {0: Mixer, 1: Channel Rack, 2: Playlist, 3: Piano Roll, 4: Browser, 5: Plugin (general) 6: Effect Plugin, 7: Generator Plugin
         self.isInPlugin = False
-        self.channelPluginName = ""
-        self.mixerPluginName = ""
+        self.channelPluginName = "NONE"
+        self.mixerPluginName = "NONE"
 
     def OnInit(self):
         #Set Launchpad into DAW mode
@@ -85,9 +85,11 @@ class LaunchpadX():
                     self.clearButtons()
                     device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247]))
                     self.updateSession()
-                if event.data1 == 96 and self.channelPluginName == "FPC": #Note Mode, FPC DAW Drumrack
+                if event.data1 == 96:
                     self.currentScreen = 1
-                    FPCModule.updateArrows(self.currentScreen)
+                    self.updateNoteMode()
+                    if self.channelPluginName == "FPC": #Note Mode, FPC DAW Drumrack
+                        FPCModule.updateArrows(self.currentScreen)
             event.handled = True
 
         if (event.data1 == 98): #Record + Dump Score
@@ -170,6 +172,9 @@ class LaunchpadX():
                     device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
                 else:
                     device.midiOutMsg(176, 144, 98, 0)
+        if flags == 295:
+            self.updateSession()
+            self.updateNoteMode()
         if (flags == 4096 or flags == 4352):
             if ui.getFocusedPluginName() == "Gross Beat" and self.currentScreen == 0:
                 grossBeatModule.updateSlots()
@@ -205,9 +210,10 @@ class LaunchpadX():
             device.midiOutMsg(input, 144, button, 0)
 
     def updateCurrentView(self):
-        if (ui.getFocused(5) >= 1 and ((ui.getFocusedPluginName() != self.channelPluginName) and (ui.getFocusedPluginName() != self.mixerPluginName))): #Is in plugin and not in same plugin
+        if ui.getFocused(5) >= 1:
             self.isInPlugin = True
-            print()
+        if (ui.getFocused(5) >= 1 and ((ui.getFocusedPluginName() != self.channelPluginName) and (ui.getFocusedPluginName() != self.mixerPluginName))): #Is in plugin and not in same plugin
+            print(self.channelPluginName)
             if ui.getFocused(6) >= 1:
                 self.mixerPluginName = ui.getFocusedPluginName()
             else:
@@ -219,6 +225,7 @@ class LaunchpadX():
             self.updateNoteMode()
         if (ui.getFocused(5) < 1 and self.isInPlugin): # Isn't in plugin
             self.isInPlugin = False
+            self.FLCurrentWindow = -1
             self.mixerPluginName = ""
             self.updateSession()
 
@@ -233,11 +240,14 @@ class LaunchpadX():
                     colorMode = lambda recording: 146 if recording else 144
                     device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
                 else:
-                    device.midiOutMsg(176, 144, 98, 0)                    
+                    device.midiOutMsg(176, 144, 98, 0) 
+            print("yes!!!!!!!!")                   
             self.updateSession()
 
     def updateSession(self):
-        if (self.FLCurrentWindow == 0 and not self.isInPlugin): #Mixer, not in Plugin
+        print(ui.getFocused(5))
+        if (self.FLCurrentWindow == 0 and ui.getFocused(5) < 1): #Mixer, not in Plugin
+            print("got!")
             mixerModule.updateMixerLayout(self.currentScreen, None)
         elif self.mixerPluginName == "Gross Beat":
             grossBeatModule.updateGrossBeatLayout(self.currentScreen, mixer.getActiveEffectIndex()[0], mixer.getActiveEffectIndex()[1])
