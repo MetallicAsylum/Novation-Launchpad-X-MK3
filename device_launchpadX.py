@@ -52,7 +52,6 @@ class LaunchpadX():
         device.midiOutSysex(bytes(layoutReadbackMsg))
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 1, 1, 247]))
         self.OnRefresh(260)
-        self.updateNoteMode()
 
     def OnDeInit(self):
         #Set Launchpad into Standalone mode
