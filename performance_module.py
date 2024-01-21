@@ -72,7 +72,12 @@ class PerformanceModule():
         padNum = padToDisplay[event.data1] % 8
         if event.data2 > 0:
             if (playlist.getLiveTriggerMode(padTrack + self.YOffset) in [0, 1, 2]):
-                playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
+                print("status:", playlist.getLiveBlockStatus(padTrack, padNum, 1))
+                if playlist.getLiveBlockStatus(padTrack + self.YOffset, padNum + self.XOffset, 1) == 2:
+                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2)
+                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 32)
+                else:  
+                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
                 playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 1) #Mute Others
             elif (playlist.getLiveTriggerMode(padTrack + self.YOffset)) == 3:
                 if (playlist.getLiveBlockStatus(padTrack + self.YOffset, padNum + self.XOffset, 1) != 2):
