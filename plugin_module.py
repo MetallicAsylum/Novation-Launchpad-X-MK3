@@ -1,5 +1,6 @@
 import device
 import plugins
+from math import floor
 
 class PluginFPC():
     def __init__(self) -> None:
@@ -35,18 +36,19 @@ class PluginFPC():
     def updateNoteMode(self, chanIndex, currentScreen):
         self.chanIndex = chanIndex
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 0, 1, 0, 247])) #Clear Note Mode
-        if currentScreen == 1:
-            device.midiOutMsg(176, 144, 93, 1)
-            device.midiOutMsg(176, 144, 94, 1)
-        else:
-            device.midiOutMsg(176, 144, 93, 0)
-            device.midiOutMsg(176, 144, 94, 0)
+        self.updateArrows(currentScreen)
         device.midiOutMsg(176, 144, 91, 0)
         device.midiOutMsg(176, 144, 92, 0)
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 1, 247])) # Update to Drum Rack
         self.updatePadsColor(chanIndex)
         
-
+    def updateArrows(self, currentScreen):
+        if currentScreen == 1 or currentScreen == None:
+            device.midiOutMsg(176, 144, 93, 1)
+            device.midiOutMsg(176, 144, 94, 1)  
+        else:
+            device.midiOutMsg(176, 144, 93, 0)
+            device.midiOutMsg(176, 144, 94, 0)
     def updatePadsColor(self, chanIndex): #Update Launchpad Pad Color
         for i in range(36, 84):
             if i >= 52 and i < 68:
@@ -56,6 +58,119 @@ class PluginFPC():
             else:
                  offset = 52
             device.midiOutMsg(152, 152, i, convertColor(plugins.getPadInfo(chanIndex, -1, 2, i - offset)))
+
+class PluginGrossBeat():
+    def __init__(self) -> None:
+        self.mixerIndex = -1
+        self.slotIndex = -1
+        self.padSelectedTime = 81
+        self.padSelectedVol = 85
+        self.viewDown = False
+
+    def OnMidiMsg(self, event):
+        if event.data2 == 127:
+            if event.data1 == 91 and self.viewDown:
+                device.midiOutMsg(176, 144, 91, 3) 
+                event.handled = True
+            if event.data1 == 92 and not self.viewDown:
+                device.midiOutMsg(176, 144, 92, 3)
+                event.handled = True
+        else:
+            if event.data1 == 91 and self.viewDown:
+                self.viewDown = False
+                self.updateArrows()
+                device.midiOutMsg(144, 144, self.padSelectedTime, 27)
+                device.midiOutMsg(144, 144, self.padSelectedVol, 11)
+                self.padSelectedTime -= 10
+                self.padSelectedVol -= 10
+                if self.padSelectedTime > 9:
+                    device.midiOutMsg(144, 146, self.padSelectedTime, 25)
+                if self.padSelectedVol > 9:
+                    device.midiOutMsg(144, 146, self.padSelectedVol, 9)
+                event.handled = True
+
+            if event.data1 == 92 and not self.viewDown:
+                self.viewDown = True
+                self.updateArrows()
+                device.midiOutMsg(144, 144, self.padSelectedTime, 27)
+                device.midiOutMsg(144, 144, self.padSelectedVol, 11)
+                self.padSelectedTime += 10
+                self.padSelectedVol += 10
+                if self.padSelectedTime < 89:
+                    device.midiOutMsg(144, 146, self.padSelectedTime, 25)
+                if self.padSelectedVol < 89:
+                    device.midiOutMsg(144, 146, self.padSelectedVol, 9)
+                event.handled = True
+
+        
+    def OnNoteOn(self, event):
+        if event.data2 > 0:
+            pad = event.data1
+            offset = 4 if self.viewDown else 0
+            if floor((pad%10)/5) == 0:
+                event.note = (pad - ((14 * (floor(pad/10)-6)) - 7)) + offset
+                device.midiOutMsg(144, 144, self.padSelectedTime, 27)
+                self.padSelectedTime = pad
+                device.midiOutMsg(144, 146, self.padSelectedTime, 25)
+            else:
+                event.note = (pad - ((14 * (floor(pad/10)-6)) + 33)) + offset
+                device.midiOutMsg(144, 144, self.padSelectedVol, 11)
+                self.padSelectedVol = pad
+                device.midiOutMsg(144, 146, self.padSelectedVol, 9)
+
+
+    def updateGrossBeatLayout(self, currentScreen, mixerIndex, slotIndex):
+        if currentScreen == 13:
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247]))
+            currentScreen = 0
+        if currentScreen == 0:
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247]))
+            self.mixerIndex = mixerIndex
+            self.slotIndex = slotIndex
+            print("param:", plugins.getParamName(0, self.mixerIndex, self.slotIndex))
+            self.updateArrows()
+            self.updatePadsColor()
+
+    def updateArrows(self):
+        device.midiOutMsg(176, 144, 93, 0)
+        device.midiOutMsg(176, 144, 94, 0)
+        if self.viewDown:
+            device.midiOutMsg(176, 144, 91, 1)
+            device.midiOutMsg(176, 144, 92, 0)  
+        else:
+            device.midiOutMsg(176, 144, 91, 0)
+            device.midiOutMsg(176, 144, 92, 1)
+            
+
+    def updatePadsColor(self):
+        for i in range(11, 89):
+            if floor((i%10)/5) == 0:
+                device.midiOutMsg(144, 144, i, 27)
+            else:
+                device.midiOutMsg(144, 144, i, 11)
+        self.updateSlots()
+
+    def updateSlots(self):
+        print("param time:", plugins.getParamValue(0, self.mixerIndex, self.slotIndex))
+        print("param vol:", plugins.getParamValue(1, self.mixerIndex, self.slotIndex))
+        timeSlot = round(plugins.getParamValue(0, self.mixerIndex, self.slotIndex)/0.02857)
+        volSlot = round(plugins.getParamValue(1, self.mixerIndex, self.slotIndex)/0.02857)
+        offset = 10 if self.viewDown else 0
+        padTime = 81 + offset if timeSlot == 0 else round((timeSlot+1) - (14 * (floor(((timeSlot+1)-0.1)/4))-80)) + offset
+        padVol = 85 + offset if volSlot == 0 else round((volSlot+1) - (14 * (floor(((volSlot+1)-0.1)/4))-84)) + offset
+        print(timeSlot, padTime,volSlot, padVol)
+        if padTime > 9:
+            device.midiOutMsg(144, 144, self.padSelectedTime, 27)
+            self.padSelectedTime = padTime
+            device.midiOutMsg(144, 146, padTime, 25)
+        if padVol > 9:
+            device.midiOutMsg(144, 144, self.padSelectedVol, 11)
+            self.padSelectedVol = padVol
+            device.midiOutMsg(144, 146, padVol, 9)
+
+
+
+
 
 def convertColor(color) -> int: #Convert gotten color to color in Launchpad X Color Palette
         if color == 10462118:

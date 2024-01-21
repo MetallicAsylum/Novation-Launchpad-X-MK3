@@ -1,9 +1,10 @@
 # name= Novation Launchpad X MK3
 # url= https://forum.image-line.com/viewtopic.php?t=321464
+# github = https://github.com/MetallicAsylum/Novation-Launchpad-X-MK3/
 """
 Developer: Maxwell Zentolight MaxwellZentolight@Gmail.com
-Version 1.0
-Date: 12/29/2023
+Version 1.1
+Date: 1/20/2024
 """
 
 import playlist
@@ -12,7 +13,9 @@ import patterns
 import ui
 import transport
 import device
+import mixer
 import general
+import plugins
 import time
 from _thread import start_new_thread
 
@@ -23,6 +26,7 @@ from default_session import DefaultSessionModule
 
 mixerModule = MixerModule()
 FPCModule = plugin_module.PluginFPC()
+grossBeatModule = plugin_module.PluginGrossBeat()
 performanceModule = PerformanceModule()
 defaultSessionModule = DefaultSessionModule()
 
@@ -32,12 +36,13 @@ layoutReadbackMsg = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x00, 0xF7]
 
 class LaunchpadX():
     def __init__(self) -> None:
-        self.currentScreen = None #Initialized on OnInit
-        self.timeCalled = 0
+        self.currentScreen = None #Initialized on OnInit, {0: Session, 1: Note Mode, [2,3 unused], 4-12: Custom Modes, 13: DAW Fader, 127: Programmer Mode}
+        self.timeCalled = 0 #Helper variable for button holds
 
-        self.FLCurrentWindow = -1
+        self.FLCurrentWindow = -1 #FL Window Constants, {0: Mixer, 1: Channel Rack, 2: Playlist, 3: Piano Roll, 4: Browser, 5: Plugin (general) 6: Effect Plugin, 7: Generator Plugin
         self.isInPlugin = False
-        self.pluginName = ""
+        self.channelPluginName = ""
+        self.mixerPluginName = ""
 
     def OnInit(self):
         #Set Launchpad into DAW mode
@@ -47,6 +52,7 @@ class LaunchpadX():
         device.midiOutSysex(bytes(layoutReadbackMsg))
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 1, 1, 247]))
         self.OnRefresh(260)
+        self.updateNoteMode()
 
     def OnDeInit(self):
         #Set Launchpad into Standalone mode
@@ -79,9 +85,9 @@ class LaunchpadX():
                     self.clearButtons()
                     device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247]))
                     self.updateSession()
-                if event.data1 == 96 and self.pluginName == "FPC": #Note Mode, FPC DAW Drumrack
+                if event.data1 == 96 and self.channelPluginName == "FPC": #Note Mode, FPC DAW Drumrack
                     self.currentScreen = 1
-                    self.updateSession()
+                    FPCModule.updateArrows(self.currentScreen)
             event.handled = True
 
         if (event.data1 == 98): #Record + Dump Score
@@ -106,8 +112,11 @@ class LaunchpadX():
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.OnMidiMsg(event)
                 return
-            if self.pluginName == "FPC" and self.currentScreen == 1:
+            if self.channelPluginName == "FPC" and self.currentScreen == 1:
                 FPCModule.OnMidiMsg(event)
+                return
+            if self.mixerPluginName == "Gross Beat" and self.currentScreen in [0, 13]:
+                grossBeatModule.OnMidiMsg(event)
                 return
             if playlist.getPerformanceModeState() == 1 and self.currentScreen == 1 and self.FLCurrentWindow == 2:
                 performanceModule.OnMidiMsg(event)
@@ -117,12 +126,14 @@ class LaunchpadX():
                 return
 
     def OnNoteOn(self, event):
-        if self.currentScreen == 0: #Session Mode
+        if self.currentScreen in [0, 13]: #Session Mode
             if self.FLCurrentWindow == 0 and not self.isInPlugin: #Mixer
                 mixerModule.OnControlChange(event)
-            event.handled = True
+                event.handled = True
+            if self.mixerPluginName == "Gross Beat":
+                grossBeatModule.OnNoteOn(event)
             return
-        if self.pluginName == "FPC": #FPC
+        if self.channelPluginName == "FPC": #FPC
             FPCModule.OnNoteOn(event)
             return
         if playlist.getPerformanceModeState() == 1 and self.currentScreen == 1 and self.FLCurrentWindow == 2: #Performance Mode
@@ -145,6 +156,7 @@ class LaunchpadX():
                 defaultSessionModule.OnControlChange(event, channels.channelNumber(True))
 
     def OnRefresh(self, flags):
+        print(flags)
         if flags == 4: #Mixer Interaction
             mixerModule.userMixerInteraction()
         if flags == 263: #New Mixer Selected
@@ -156,9 +168,14 @@ class LaunchpadX():
                     device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
                 else:
                     device.midiOutMsg(176, 144, 98, 0)
+        if (flags == 4096 or flags == 4352):
+            if ui.getFocusedPluginName() == "Gross Beat":
+                grossBeatModule.updateSlots()
         if (flags == 17687) and self.FLCurrentWindow == 0 and not self.isInPlugin: #Plugin on Mixer Change
             mixerModule.updatePluginScrollArrows(0)
-        if flags == 91463 and self.pluginName == "FPC": #Preset Change
+        if (flags == 65824):
+            self.updateNoteMode()
+        if flags == 91463 and self.channelPluginName == "FPC": #Preset Change
             FPCModule.updatePadsColor(channels.channelNumber())
 
     def OnUpdateLiveMode(self, lastTrack):
@@ -186,20 +203,27 @@ class LaunchpadX():
             device.midiOutMsg(input, 144, button, 0)
 
     def updateCurrentView(self):
-        if (ui.getFocused(5) >= 1 and ui.getFocusedPluginName() != self.pluginName): #Is in plugin and not in same plugin
+        if (ui.getFocused(5) >= 1 and ((ui.getFocusedPluginName() != self.channelPluginName) and (ui.getFocusedPluginName() != self.mixerPluginName))): #Is in plugin and not in same plugin
             self.isInPlugin = True
-            self.pluginName = ui.getFocusedPluginName()
+            print()
+            if ui.getFocused(6) >= 1:
+                self.mixerPluginName = ui.getFocusedPluginName()
+            else:
+                self.mixerPluginName = ""
+            if ui.getFocused(7) >= 1:
+                self.channelPluginName = ui.getFocusedPluginName()
             self.FLCurrentWindow = 1000
             self.updateSession()
-        if (ui.getFocused(5) < 1 and (self.isInPlugin or self.pluginName != "")): # Isn't in plugin
-            if self.currentScreen == 1:
-                device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247]))
+            self.updateNoteMode()
+        if (ui.getFocused(5) < 1 and self.isInPlugin): # Isn't in plugin
             self.isInPlugin = False
-            self.pluginName = ""
+            self.mixerPluginName = ""
+            self.updateSession()
+
+
+
         if ui.getFocusedFormID() != self.FLCurrentWindow: #FL Window variable needs updating
             self.FLCurrentWindow = ui.getFocusedFormID()
-            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 1, 1, 247]))
-            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247]))
             if self.FLCurrentWindow == 2 and playlist.getPerformanceModeState() == 1 and self.currentScreen == 1: #Update Note Mode for Performance Mode
                 performanceModule.updatePerformanceLayout(-1)
             if self.timeCalled == 0: #Update Record Button
@@ -213,18 +237,21 @@ class LaunchpadX():
     def updateSession(self):
         if (self.FLCurrentWindow == 0 and not self.isInPlugin): #Mixer, not in Plugin
             mixerModule.updateMixerLayout(self.currentScreen, None)
-        elif self.isInPlugin:
-            self.pluginName = ui.getFocusedPluginName()
-            if self.pluginName == "FPC":
-                FPCModule.updateNoteMode(channels.channelNumber(), self.currentScreen)
-                defaultSessionModule.updateLayout(self.currentScreen)
-            else:
-                if self.currentScreen == 1: #Is in Note Mode
-                    device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Change Note Mode to Scale
-                else:
-                    defaultSessionModule.updateLayout(self.currentScreen) #Default Session View
+        elif self.mixerPluginName == "Gross Beat":
+            grossBeatModule.updateGrossBeatLayout(self.currentScreen, mixer.getActiveEffectIndex()[0], mixer.getActiveEffectIndex()[1])
         else:
             defaultSessionModule.updateLayout(self.currentScreen) #Default Session View
+        
+    def updateNoteMode(self):
+        self.channelPluginName = plugins.getPluginName(channels.channelNumber(), -1, False, True)
+        if self.channelPluginName == "FPC":
+            FPCModule.updateNoteMode(channels.channelNumber(), self.currentScreen)
+            defaultSessionModule.updateLayout(self.currentScreen)
+        else:
+            if self.currentScreen == 1: #Is in Note Mode
+                device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Change Note Mode to Scale
+            else:
+                defaultSessionModule.updateLayout(self.currentScreen) #Default Session View
        
 
 
