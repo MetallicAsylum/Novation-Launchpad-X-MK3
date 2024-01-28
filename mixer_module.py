@@ -8,6 +8,14 @@ class MixerModule():
         self.selectedPlugin = -1 #Updates Up/Down arrows, allows picking of plugin
         self.selectedView = 0 # 0: Volume, 1: Pan, 2: Stereo Sep, 3: Polarity 4: Channel Swap 5: Mute, 6: Solo, 7: Arm Disk
         self.timeSinceLastCall = 0
+        self.calledByButton = False
+
+    def reset(self):
+        self.selectedTrack = -1 
+        self.selectedPlugin = -1
+        self.selectedView = 0
+        self.timeSinceLastCall = 0
+        self.calledByButton = False
 
     def OnMidiIn(self):
         self.activateDAWFader() #puts Session into DAW Fader Mode
@@ -33,6 +41,7 @@ class MixerModule():
             if event.data2 == 0:
                 event.handled = True
         if event.data1 == 93: #Left Arrow
+            self.calledByButton = True
             if event.data2 == 127:
                 if self.selectedTrack == 0:
                     prevTrack = 126
@@ -46,6 +55,7 @@ class MixerModule():
                 device.midiOutMsg(176, 144, 93, 1)
         if event.data1 == 94: #Right Arrow
             if event.data2 == 127:
+                self.calledByButton = True
                 if self.selectedTrack == 126:
                     nextTrack = 0
                 else:
@@ -117,16 +127,14 @@ class MixerModule():
         layouts = {0:self.mixerVolume, 1:self.mixerPan, 2:self.mixerStereo, 3:self.mixerPolarity, 4:self.mixerSwapChannels, 5:self.mixerMute, 6:self.mixerSolo, 7:self.mixerRecordArm}
         if (currentScreen in [0, 13] and self.selectedView < 3): # Current Screen in Session or DAW Fader, and Selected View has Faders
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 247]))
-        if (not self.selectedTrack == mixer.trackNumber()) and flag == None:
-            self.updatePluginScrollArrows(-2)
+        if currentScreen in [0, 13]:
+            if self.selectedTrack != mixer.trackNumber():
+                self.updatePluginScrollArrows(-2)
+            else:
+                self.updatePluginScrollArrows(-1)
         layouts[self.selectedView]()
         self.setViewButton()
-
-        if flag == None:
-            for i in range(93, 95):
-                device.midiOutMsg(176, 144, i, 1)
         
-
     def mixerVolume(self):
         #Sets DAW Faders
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 0, 0, 50,  1, 0, 1, 50,  2, 0, 2, 50, 3, 0, 3, 50,  4, 0, 4, 50, 5, 0, 5, 50,  6, 0, 6, 50,  7, 0, 7, 50,          247]))
@@ -166,8 +174,6 @@ class MixerModule():
             if mixer.getRouteSendActive(self.selectedTrack + (i-offset), 0):
                 device.midiOutMsg(180, 180, i, self.volToCC(mixer.getTrackVolume(self.selectedTrack + (i-offset))))
                 device.midiOutMsg(181, 181, i, self.convertColor(mixer.getTrackColor(self.selectedTrack + (i-offset))))
-            else:
-                print()
 
         device.midiOutMsg(181, 181, offset, 96)
                 
@@ -251,6 +257,11 @@ class MixerModule():
 
     def updatePluginScrollArrows(self, direction):
         self.selectedTrack = mixer.trackNumber()
+        if not self.calledByButton:
+            device.midiOutMsg(176, 144, 93, 1)
+            device.midiOutMsg(176, 144, 94, 1)
+        else:
+            self.calledByButton = False
         if direction == -2: #Init and New Mixer
             self.selectedPlugin = -1
             device.midiOutMsg(176, 144, 91, 0)

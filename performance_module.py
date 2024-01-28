@@ -12,6 +12,11 @@ class PerformanceModule():
         self.XOffset = 0 #Offset from Left
         self.YOffset = 0 #Offset from Track 1
 
+    def reset(self):
+        self.isInPerformanceMode = 0
+        self.XOffset = 0 
+        self.YOffset = 0 
+
     def OnMidiMsg(self, event):
         if event.data1 == 91: #Up
             if event.data2 == 127:
@@ -67,46 +72,44 @@ class PerformanceModule():
 
 
     def OnNoteOn(self, event):
+        if event.data2 == 0:
+            return
         padToDisplay = {64 : 0,65 : 1,66 : 2,67 : 3,96 : 4,97 : 5,98 : 6,99 : 7,60 : 8,61 : 9,62 : 10,63 : 11,92 : 12,93 : 13,94 : 14,95 : 15,56 : 16,57 : 17,58 : 18,59 : 19,88 : 20,89 : 21,90 : 22,91 : 23,52 : 24,53 : 25,54 : 26,55 : 27,84 : 28,85 : 29,86 : 30,87 : 31,48 : 32,49 : 33,50 : 34,51 : 35,80 : 36,81 : 37,82 : 38,83 : 39,44 : 40,45 : 41,46 : 42,47 : 43,76 : 44,77 : 45,78 : 46,79 : 47,40 : 48,41 : 49,42 : 50,43 : 51,72 : 52,73 : 53,74 : 54,75 : 55,36 : 56,37 : 57,38 : 58,39 : 59,68 : 60,69 : 61,70 : 62,71 : 63}
         padTrack = floor(padToDisplay[event.data1]/8) + 1
         padNum = padToDisplay[event.data1] % 8
         if event.data2 > 0:
             if (playlist.getLiveTriggerMode(padTrack + self.YOffset) in [0, 1, 2]):
-                print("status:", playlist.getLiveBlockStatus(padTrack, padNum, 1))
-                if playlist.getLiveBlockStatus(padTrack + self.YOffset, padNum + self.XOffset, 1) == 2:
-                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2)
-                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 32)
-                else:  
+                if playlist.getLiveBlockStatus(padTrack + self.YOffset, padNum + self.XOffset, 1) in [2,3]:
+                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2) #Clear Row
+                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 32) #Release Note
+                else: 
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
-                playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 1) #Mute Others
+                
             elif (playlist.getLiveTriggerMode(padTrack + self.YOffset)) == 3:
                 if (playlist.getLiveBlockStatus(padTrack + self.YOffset, padNum + self.XOffset, 1) != 2):
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 1) #Mute Others
                 else:
+                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2)
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
                     playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2) #Stop All Clips
-
-
-            playlist.refreshLiveClips()
-            event.handled = True
-        else:
-            padToDisplay = {64 : 0,65 : 1,66 : 2,67 : 3,96 : 4,97 : 5,98 : 6,99 : 7,60 : 8,61 : 9,62 : 10,63 : 11,92 : 12,93 : 13,94 : 14,95 : 15,56 : 16,57 : 17,58 : 18,59 : 19,88 : 20,89 : 21,90 : 22,91 : 23,52 : 24,53 : 25,54 : 26,55 : 27,84 : 28,85 : 29,86 : 30,87 : 31,48 : 32,49 : 33,50 : 34,51 : 35,80 : 36,81 : 37,82 : 38,83 : 39,44 : 40,45 : 41,46 : 42,47 : 43,76 : 44,77 : 45,78 : 46,79 : 47,40 : 48,41 : 49,42 : 50,43 : 51,72 : 52,73 : 53,74 : 54,75 : 55,36 : 56,37 : 57,38 : 58,39 : 59,68 : 60,69 : 61,70 : 62,71 : 63}
-            if playlist.getLiveTriggerMode(padTrack + self.YOffset) == 1:
-                playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2) #Stop All Clips
-            if playlist.getLiveTriggerMode(padTrack + self.YOffset) == 2: #Unsure on how to make it keep moving? Might be bugged in FL
-                playlist.triggerLiveClip(padTrack + self.YOffset, -1, 32)
-                playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, midi.TLC_Queue)
+                event.handled = True
+            else:
+                padToDisplay = {64 : 0,65 : 1,66 : 2,67 : 3,96 : 4,97 : 5,98 : 6,99 : 7,60 : 8,61 : 9,62 : 10,63 : 11,92 : 12,93 : 13,94 : 14,95 : 15,56 : 16,57 : 17,58 : 18,59 : 19,88 : 20,89 : 21,90 : 22,91 : 23,52 : 24,53 : 25,54 : 26,55 : 27,84 : 28,85 : 29,86 : 30,87 : 31,48 : 32,49 : 33,50 : 34,51 : 35,80 : 36,81 : 37,82 : 38,83 : 39,44 : 40,45 : 41,46 : 42,47 : 43,76 : 44,77 : 45,78 : 46,79 : 47,40 : 48,41 : 49,42 : 50,43 : 51,72 : 52,73 : 53,74 : 54,75 : 55,36 : 56,37 : 57,38 : 58,39 : 59,68 : 60,69 : 61,70 : 62,71 : 63}
+                if playlist.getLiveTriggerMode(padTrack + self.YOffset) == 1:
+                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2) #Stop All Clips
+                if playlist.getLiveTriggerMode(padTrack + self.YOffset) == 2: #Unsure on how to make it keep moving? Might be bugged in FL
+                    playlist.triggerLiveClip(padTrack + self.YOffset, -1, 32)
+                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, midi.TLC_Queue)
             
-            playlist.refreshLiveClips() #Refresh
-            event.handled = True
+                playlist.refreshLiveClips() #Refresh
+                event.handled = True
 
     def updatePerformanceLayout(self, lastTrack):
         self.isInPerformanceMode = playlist.getPerformanceModeState()
-        if self.isInPerformanceMode == 1:
+        if self.isInPerformanceMode:
             self.updateLights()
         else:
-            print("yes")
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Back to Default Note Mode
         #Update Direction Arrow Lights
         if self.YOffset == 0:
@@ -151,7 +154,6 @@ def convertColor(color) -> int: #Convert gotten color to color in Launchpad X Co
             RGBHex = hex(color)
         else:
             RGBHex = hex(16777216 + color)
-        #print(RGBHex)
         RGBSplit = [RGBHex[i:i+2] for i in range(0, len(RGBHex), 2)]
         RGBInt = [int, int, int]
         for i in range(1,4):
@@ -168,7 +170,6 @@ def convertColorVibrant(color) -> int: #Convert gotten color to color in Launchp
             RGBHex = hex(color)
         else:
             RGBHex = hex(16777216 + color)
-        #print(RGBHex)
         RGBSplit = [RGBHex[i:i+2] for i in range(0, len(RGBHex), 2)]
         RGBInt = [int, int, int]
         for i in range(1,4):

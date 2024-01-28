@@ -40,6 +40,15 @@ class LaunchpadX():
         self.timeCalled = 0 #Helper variable for button holds
 
         self.FLCurrentWindow = -1 #FL Window Constants, {0: Mixer, 1: Channel Rack, 2: Playlist, 3: Piano Roll, 4: Browser, 5: Plugin (general) 6: Effect Plugin, 7: Generator Plugin
+        self.isInPerformanceMode = False
+        self.isInPlugin = False
+        self.channelPluginName = "NONE"
+        self.mixerPluginName = "NONE"
+
+    def reset(self):
+        self.timeCalled = 0
+        self.FLCurrentWindow = -1 #FL Window Constants, {0: Mixer, 1: Channel Rack, 2: Playlist, 3: Piano Roll, 4: Browser, 5: Plugin (general) 6: Effect Plugin, 7: Generator Plugin
+        self.isInPerformanceMode = False
         self.isInPlugin = False
         self.channelPluginName = "NONE"
         self.mixerPluginName = "NONE"
@@ -60,8 +69,17 @@ class LaunchpadX():
         device.midiOutSysex(bytes(launchpadDAWModemsg))
 
     def OnIdle(self):
+        if self.timeCalled == 0: #Update Record Button
+            self.updateRecordingButton()
         #Check if window has changed, flag tended to be pretty unreliable
-        self.updateCurrentView()
+        self.updatePluginView()
+        self.updateFlWindowView()
+        #Update Gross Beat Slots
+        if self.mixerPluginName == "Gross Beat" and self.currentScreen == 0:
+            grossBeatModule.updateSlots()
+        #CheckHeld
+        if self.timeCalled > 0:
+            self.checkHeld()
 
     def OnMidiIn(self, event):
         if event.sysex == None:
@@ -101,13 +119,9 @@ class LaunchpadX():
                 event.handled = True
                 if (time.time() - self.timeCalled < holdLengthSeconds):
                     transport.record()
+                    self.timeCalled = 0
                 else:
-                    if (transport.isRecording()):
-                        colorMode = lambda recording: 146 if recording else 144
-                        device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
-                    else:
-                        device.midiOutMsg(176, 144, 98, 0)
-                self.timeCalled = 0
+                    self.updateRecordingButton()
 
         if (event.data1 in [19, 29, 39, 49, 59, 69, 79, 89, 91, 92, 93, 94]): #Session Arrows and Side Arrows
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
@@ -127,13 +141,11 @@ class LaunchpadX():
                 return
 
     def OnNoteOn(self, event):
-        print(event.midiChan)
         if self.currentScreen in [0, 13]: #Session Mode
             if self.FLCurrentWindow == 0 and not self.isInPlugin: #Mixer
                 mixerModule.OnControlChange(event)
                 event.handled = True
             if self.mixerPluginName == "Gross Beat" and event.midiChan != 8: #Gross Beat
-                print(event.midiChan, "got!")
                 grossBeatModule.OnNoteOn(event)
             return
         if self.channelPluginName == "FPC" and event.midiChan == 8: #FPC
@@ -158,47 +170,46 @@ class LaunchpadX():
             if self.currentScreen in [0, 13]: #Session or DAW Fader
                 defaultSessionModule.OnControlChange(event, channels.channelNumber(True))
 
+    def OnProjectLoad(self, status):
+        if status == 100:
+            self.reset()
+            mixerModule.reset()
+            FPCModule.reset()
+            grossBeatModule.reset()
+            performanceModule.reset()
+            defaultSessionModule.reset()
+            
+
+
     def OnRefresh(self, flags):
-        print(flags)
+        print("flag: ", flags)
         if flags == 4: #Mixer Interaction
             mixerModule.userMixerInteraction()
         if flags == 263: #New Mixer Selected
             mixerModule.updateMixerLayout(self.currentScreen, flags)
-        if (flags == 260 or flags == 256): #Record Button Change or Playing State Change
-            if self.timeCalled == 0:
-                if (transport.isRecording()):
-                    colorMode = lambda recording: 146 if recording else 144
-                    device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
-                else:
-                    device.midiOutMsg(176, 144, 98, 0)
-        if flags == 295:
-            self.updateSession()
-            self.updateNoteMode()
-        if (flags == 4096 or flags == 4352):
-            if ui.getFocusedPluginName() == "Gross Beat" and self.currentScreen == 0:
-                grossBeatModule.updateSlots()
+        if (flags == 260): #Record Button Change or Playing State Change
+            if self.timeCalled == -1:
+                self.updateRecordingButton()
         if (flags == 17687) and self.FLCurrentWindow == 0 and not self.isInPlugin: #Plugin on Mixer Change
             mixerModule.updatePluginScrollArrows(0)
-        if (flags == 65824):
+        if (flags in [288, 32768, 65824, 66848, 65792, 98560]): #Channel Slot Change
             self.updateNoteMode()
         if flags == 91463 and self.channelPluginName == "FPC": #Preset Change
             FPCModule.updatePadsColor(channels.channelNumber())
 
     def OnUpdateLiveMode(self, lastTrack):
-        if self.FLCurrentWindow == 2 and self.currentScreen == 1 and playlist.getPerformanceModeState() == 1: #If in Playlist and Note Mode
-            performanceModule.updatePerformanceLayout(lastTrack)
+            self.updatePerformanceMode(lastTrack)
 
     def checkHeld(self):
-        while (self.timeCalled != 0):
-            if time.time() - self.timeCalled > holdLengthSeconds:
-                print(device.getName()) # [ISSUE] Sometimes calls wrong device? I can't reliably recreate this bug but I have noticed it multiple times
-                device.midiOutMsg(176, 145, 98, 3)
-                if (patterns.isPatternDefault(patterns.patternNumber())) != 1:
-                    patterns.findFirstNextEmptyPat(2)
-                general.dumpScoreLog(timeFromDumpScoreLog, True)
-                general.clearLog()
-                break
-            time.sleep(holdLengthSeconds) 
+        if time.time() - self.timeCalled > holdLengthSeconds:
+            print(device.getName()) # [ISSUE] Sometimes calls wrong device? I can't reliably recreate this bug but I have noticed it multiple times
+            device.midiOutMsg(176, 145, 98, 3)
+            if (patterns.isPatternDefault(patterns.patternNumber())) != 1:
+                patterns.findFirstNextEmptyPat(2)
+            general.dumpScoreLog(timeFromDumpScoreLog, True)
+            general.clearLog()
+            self.timeCalled = -time.time()
+            return
     
     def clearButtons(self): 
         for button in range(11, 100):
@@ -208,61 +219,95 @@ class LaunchpadX():
                 input = 144 #Note Pads
             device.midiOutMsg(input, 144, button, 0)
 
-    def updateCurrentView(self):
-        if ui.getFocused(5) >= 1:
-            self.isInPlugin = True
-        if (ui.getFocused(5) >= 1 and ((ui.getFocusedPluginName() != self.channelPluginName) and (ui.getFocusedPluginName() != self.mixerPluginName))): #Is in plugin and not in same plugin
-            print(self.channelPluginName)
-            if ui.getFocused(6) >= 1:
-                self.mixerPluginName = ui.getFocusedPluginName()
-            else:
-                self.mixerPluginName = ""
-            if ui.getFocused(7) >= 1:
-                self.channelPluginName = ui.getFocusedPluginName()
-            self.FLCurrentWindow = 1000
-            self.updateSession()
-            self.updateNoteMode()
-        if (ui.getFocused(5) < 1 and self.isInPlugin): # Isn't in plugin
+    def updatePluginView(self):
+        pluginFocus = ui.getFocused(5)
+        if not pluginFocus:
             self.isInPlugin = False
-            self.FLCurrentWindow = -1
+            self.channelPluginName = ""
             self.mixerPluginName = ""
-            self.updateSession()
-
-
-
-        if ui.getFocusedFormID() != self.FLCurrentWindow: #FL Window variable needs updating
-            self.FLCurrentWindow = ui.getFocusedFormID()
-            if self.FLCurrentWindow == 2 and playlist.getPerformanceModeState() == 1 and self.currentScreen == 1: #Update Note Mode for Performance Mode
-                performanceModule.updatePerformanceLayout(-1)
-            if self.timeCalled == 0: #Update Record Button
-                if (transport.isRecording()):
-                    colorMode = lambda recording: 146 if recording else 144
-                    device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
-                else:
-                    device.midiOutMsg(176, 144, 98, 0) 
-            print("yes!!!!!!!!")                   
-            self.updateSession()
+            return
+        pluginName = ui.getFocusedPluginName()
+        if pluginName == "":
+            return
+        effectFocus = ui.getFocused(6)
+        generatorFocus = ui.getFocused(7)
+        if effectFocus:
+            effectLocation = mixer.getActiveEffectIndex()
+        if generatorFocus and not plugins.isValid(channels.channelNumber(),-1,True):
+            self.channelPluginName = ""
+            return
+        if effectFocus and not plugins.isValid(effectLocation[0], effectLocation[1],True):
+            self.mixerPluginName = ""
+            return
+        if pluginName in [self.channelPluginName, self.mixerPluginName]:
+            return
+        
+        self.isInPlugin = True
+        self.FLCurrentWindow = 1000
+        if generatorFocus:
+            self.channelPluginName = pluginName
+            self.mixerPluginName = ""
+        if effectFocus:
+            self.mixerPluginName = pluginName
+        self.updateSession()
+        self.updateNoteMode()
+ 
+    def updateFlWindowView(self):
+        pluginFocus = ui.getFocused(5)
+        if pluginFocus:
+            return
+        focusedWindow = ui.getFocusedFormID()
+        performanceModeState = playlist.getPerformanceModeState()
+        if focusedWindow != 2:
+            self.isInPerformanceMode = False
+        if performanceModeState != self.isInPerformanceMode and focusedWindow == 2:
+            self.isInPerformanceMode = performanceModeState
+            self.updatePerformanceMode(-1)
+        if focusedWindow == self.FLCurrentWindow:
+            return
+        self.FLCurrentWindow = focusedWindow
+        self.updateSession()
+        self.updateNoteMode()
 
     def updateSession(self):
-        print(ui.getFocused(5))
         if (self.FLCurrentWindow == 0 and ui.getFocused(5) < 1): #Mixer, not in Plugin
-            print("got!")
             mixerModule.updateMixerLayout(self.currentScreen, None)
+            return
         elif self.mixerPluginName == "Gross Beat":
             grossBeatModule.updateGrossBeatLayout(self.currentScreen, mixer.getActiveEffectIndex()[0], mixer.getActiveEffectIndex()[1])
+            return
         else:
             defaultSessionModule.updateLayout(self.currentScreen) #Default Session View
+            return
         
     def updateNoteMode(self):
+        if channels.channelNumber(True) == -1:
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247]))
+            return
+        if self.isInPerformanceMode and self.FLCurrentWindow == 2:
+            return
+        if not plugins.isValid(channels.channelNumber(True),-1,True):
+            #Switch note mode to scale
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Called for when prev channel was FPC and switches to non-plugin
+            return
         self.channelPluginName = plugins.getPluginName(channels.channelNumber(), -1, False, True)
-        if self.channelPluginName == "FPC":
+        if self.channelPluginName == "FPC": #and self.mixerPluginName != "Edison":
             FPCModule.updateNoteMode(channels.channelNumber(), self.currentScreen)
-            defaultSessionModule.updateLayout(self.currentScreen)
         else:
             if self.currentScreen == 1: #Is in Note Mode
                 device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Change Note Mode to Scale
-            else:
-                defaultSessionModule.updateLayout(self.currentScreen) #Default Session View
+    
+    def updatePerformanceMode(self, lastTrack):
+        if self.currentScreen == 1 and self.isInPerformanceMode:
+            performanceModule.updatePerformanceLayout(lastTrack)
+
+    def updateRecordingButton(self):
+        if (transport.isRecording()):
+            colorMode = lambda recording: 146 if recording else 144
+            device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
+        else:
+            device.midiOutMsg(176, 144, 98, 0)
+        self.timeCalled = -1
        
 
 
@@ -291,6 +336,9 @@ def OnNoteOff(event):
 
 def OnControlChange(event):
     Launchpad.OnControlChange(event)
+
+def OnProjectLoad(status):
+    Launchpad.OnProjectLoad(status)
 
 def OnRefresh(flags):
     Launchpad.OnRefresh(flags)
