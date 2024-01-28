@@ -3,8 +3,8 @@
 # github = https://github.com/MetallicAsylum/Novation-Launchpad-X-MK3/
 """
 Developer: Maxwell Zentolight MaxwellZentolight@Gmail.com
-Version 1.1
-Date: 1/20/2024
+Version 1.2
+Date: 1/28/2024
 """
 
 import playlist
