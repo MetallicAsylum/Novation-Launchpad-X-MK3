@@ -8,14 +8,13 @@
 your heart's content
 
 # How To Install:
-1. Drop the MIDI Script in the hardware folder, usually found in ...\Documents\Image-Line\FL Studio\Settings\Hardware\
-2. Refresh the scripts and click on "LPX MIDI", keep "MIDIIN2 (LPX MIDI)" set to generic controller.
-3. In the dropdown under Controller Type, set "LPX MIDI" to "Novation Launchpad X MK3" and set it to a port number
-4. You know the script will be active if the "Session" button is now lit!
+1. Download and decompress the ZIP
+2. Drop the 'Novation Launchpad X MK3' folder into the hardware folder, usually found in ...\Documents\Image-Line\FL Studio\Settings\Hardware\
+3. Refresh the scripts and click on "LPX MIDI", keep "MIDIIN2 (LPX MIDI)" set to generic controller.
+4. In the dropdown under Controller Type, set "LPX MIDI" to "Novation Launchpad X MK3" and set it to a port number
+5. You know the script will be active if the "Session" button is now lit white!
 
 # Known Issues:
-* For some odd reason, the button flashing when dumping the score log doesn't work due to it getting the device exactly 5 ports ahead,
-weird bug but I haven't found a direct fix.
 * Default Mixer Track colors are not accurate for Users using Themes that have a shift in the Hue Knob, this seems to be an FL API error
 when getting a color that I have not found a workaround for.
 * In performance mode, the "Press" category "Hold and Motion" doesn't seem to work as expected, so it works the same as "Retrigger"
