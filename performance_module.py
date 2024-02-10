@@ -73,6 +73,7 @@ class PerformanceModule():
 
     def OnNoteOn(self, event):
         if event.data2 == 0:
+            event.handled = True
             return
         padToDisplay = {64 : 0,65 : 1,66 : 2,67 : 3,96 : 4,97 : 5,98 : 6,99 : 7,60 : 8,61 : 9,62 : 10,63 : 11,92 : 12,93 : 13,94 : 14,95 : 15,56 : 16,57 : 17,58 : 18,59 : 19,88 : 20,89 : 21,90 : 22,91 : 23,52 : 24,53 : 25,54 : 26,55 : 27,84 : 28,85 : 29,86 : 30,87 : 31,48 : 32,49 : 33,50 : 34,51 : 35,80 : 36,81 : 37,82 : 38,83 : 39,44 : 40,45 : 41,46 : 42,47 : 43,76 : 44,77 : 45,78 : 46,79 : 47,40 : 48,41 : 49,42 : 50,43 : 51,72 : 52,73 : 53,74 : 54,75 : 55,36 : 56,37 : 57,38 : 58,39 : 59,68 : 60,69 : 61,70 : 62,71 : 63}
         padTrack = floor(padToDisplay[event.data1]/8) + 1
@@ -102,8 +103,8 @@ class PerformanceModule():
                     playlist.triggerLiveClip(padTrack + self.YOffset, -1, 32)
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, midi.TLC_Queue)
             
-                playlist.refreshLiveClips() #Refresh
-                event.handled = True
+                #playlist.refreshLiveClips() #Refresh
+            event.handled = True
 
     def updatePerformanceLayout(self, lastTrack):
         self.isInPerformanceMode = playlist.getPerformanceModeState()
@@ -179,7 +180,7 @@ def convertColorVibrant(color) -> int: #Convert gotten color to color in Launchp
                 RGBInt[i-1] = (int(RGBSplit[i], 16) + 48) * 1.5
         return getPaletteColorFromRGB([RGBInt[0], RGBInt[1], RGBInt[2]])
 
-def getPaletteColorFromRGB(input: (int, int, int)) -> int: #Gets closest Palette Color to RGB
+def getPaletteColorFromRGB(input: (int, int, int)) -> int: #Gets closest Palette Color to RGB # type: ignore
         best_palette_match = 0
         best_palette_match_distance = (0.3 * (input[0] - palette[0][0])**2) + (0.6 * (input[1] - palette[0][1])**2) + (0.1 * (input[2] - palette[0][2])**2)
 

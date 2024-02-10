@@ -378,7 +378,7 @@ class MixerModule():
                 RGBInt[i-1] = int(RGBSplit[i], 16) + 16
         return self.getPaletteColorFromRGB([RGBInt[0], RGBInt[1], RGBInt[2]])
     
-    def getPaletteColorFromRGB(self, input: (int, int, int)) -> int: #Gets closest Palette Color to RGB
+    def getPaletteColorFromRGB(self, input: (int, int, int)) -> int: #Gets closest Palette Color to RGB # type: ignore
         best_palette_match = 0
         best_palette_match_distance = (0.3 * (input[0] - palette[0][0])**2) + (0.6 * (input[1] - palette[0][1])**2) + (0.1 * (input[2] - palette[0][2])**2)
 

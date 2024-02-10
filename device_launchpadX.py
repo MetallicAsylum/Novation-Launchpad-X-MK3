@@ -94,7 +94,7 @@ class LaunchpadX():
                 mixerModule.OnMidiIn()
 
     def OnMidiMsg(self, event):
-        if (event.data1 in [95, 96, 97]): #Session, Note, and Custom Button
+        if (event.data1 in [95, 96, 97] and event.status == 176): #Session, Note, and Custom Button
             if (event.data2 == 127):
                 device.midiOutSysex(bytes(layoutReadbackMsg))
                 if event.data1 == 95:
@@ -109,7 +109,7 @@ class LaunchpadX():
                         FPCModule.updateArrows(self.currentScreen)
             event.handled = True
 
-        if (event.data1 == 98): #Record + Dump Score
+        if (event.data1 == 98 and event.status == 176): #Record + Dump Score
             if (event.data2 == 127):
                 self.timeCalled = time.time()
                 event.handled = True
@@ -123,7 +123,7 @@ class LaunchpadX():
                 else:
                     self.updateRecordingButton()
 
-        if (event.data1 in [19, 29, 39, 49, 59, 69, 79, 89, 91, 92, 93, 94]): #Session Arrows and Side Arrows
+        if (event.data1 in [19, 29, 39, 49, 59, 69, 79, 89,] or (event.data1 in [91, 92, 93, 94] and event.status == 176)): #Session Arrows and Side Arrows
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.OnMidiMsg(event)
                 return
@@ -141,6 +141,7 @@ class LaunchpadX():
                 return
 
     def OnNoteOn(self, event):
+        print("before:", event.note)
         if self.currentScreen in [0, 13]: #Session Mode
             if self.FLCurrentWindow == 0 and not self.isInPlugin: #Mixer
                 mixerModule.OnControlChange(event)
@@ -152,6 +153,7 @@ class LaunchpadX():
             FPCModule.OnNoteOn(event)
             return
         if playlist.getPerformanceModeState() == 1 and self.currentScreen == 1 and self.FLCurrentWindow == 2: #Performance Mode
+            
             performanceModule.OnNoteOn(event)
             return
 
