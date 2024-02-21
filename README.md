@@ -1,6 +1,6 @@
 ### Novation Launchpad X MK3 Integration with FL Studio 
 # Support:
-* Performance Mode
+* Performance Mode (Full Integration)
 * Mixer
 * FPC
 * Gross Beat
@@ -21,6 +21,7 @@ when getting a color that I have not found a workaround for.
 until I can understand the undocumented way most of the flags work
 * FL Crashes when turning off the device sometimes, supposedly just an FL Bug with things running in the background, so hoping for it
 to be fixed.
+* Performance mode XY Pad is just for show at the moment, it cannot send CC messages anywhere.
 
 
 # Other Information:
@@ -28,4 +29,4 @@ to be fixed.
 * Note Mode will switch from the default scale mode you have selected into a DAW Drum Rack with the FPC Pad Colors when selecting FPC in the Channel Rack.
 * In order to use performance mode, make sure to go to Tools -> Macros -> "Prepare for Performance Mode." This will allow the Launchpad to detect different clips.
 * The Gross Beat Session layout will only appear when inside the plugin, as to not conflict with generators.
-* The "Default" Session layout appears in any window besides Gross Beat and the Mixer.
+* The "Default" Session layout appears in any window besides Gross Beat and the Mixer, and is selectable in Performance Mode with the green arrow once the view is all the way to the left.
