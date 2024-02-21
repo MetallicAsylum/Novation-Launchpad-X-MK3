@@ -4,7 +4,7 @@
 """
 Developer: Maxwell Zentolight MaxwellZentolight@Gmail.com
 Version 1.3
-Date: 2/18/2024
+Date: 2/20/2024
 """
 
 import playlist
