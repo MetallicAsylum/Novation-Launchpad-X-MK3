@@ -1,18 +1,15 @@
 import mixer
 import device
 import time
+import playlist
 
 class MixerModule():
     def __init__(self) -> None:
-        self.selectedTrack = -1 
-        self.selectedPlugin = -1 #Updates Up/Down arrows, allows picking of plugin
         self.selectedView = 0 # 0: Volume, 1: Pan, 2: Stereo Sep, 3: Polarity 4: Channel Swap 5: Mute, 6: Solo, 7: Arm Disk
         self.timeSinceLastCall = 0
         self.calledByButton = False
 
     def reset(self):
-        self.selectedTrack = -1 
-        self.selectedPlugin = -1
         self.selectedView = 0
         self.timeSinceLastCall = 0
         self.calledByButton = False
@@ -28,42 +25,30 @@ class MixerModule():
                 return
             self.selectedView = viewButton[event.data1]
             self.updateMixerLayout(0, None)
-        if event.data1 == 91: #Up Arrow
-            if event.data2 == 127:
-                self.updatePluginScrollArrows(0)
-                event.handled = True
-            if event.data2 == 0:
-                event.handled = True
-        if event.data1 == 92: #Down Arrow
-            if event.data2 == 127:
-                self.updatePluginScrollArrows(1)
-                event.handled = True
-            if event.data2 == 0:
-                event.handled = True
         if event.data1 == 93: #Left Arrow
             self.calledByButton = True
             if event.data2 == 127:
+                event.handled = True
+                device.midiOutMsg(176, 144, 93, 3)
+            if event.data2 == 0:
                 if self.selectedTrack == 0:
                     prevTrack = 126
                 else:
                     prevTrack = self.selectedTrack - 1
                 mixer.setActiveTrack(prevTrack)
                 event.handled = True
-                device.midiOutMsg(176, 144, 93, 3)
-            if event.data2 == 0:
-                event.handled = True
                 device.midiOutMsg(176, 144, 93, 1)
         if event.data1 == 94: #Right Arrow
             if event.data2 == 127:
+                device.midiOutMsg(176, 144, 94, 3)
+                event.handled = True
+            if event.data2 == 0:
                 self.calledByButton = True
                 if self.selectedTrack == 126:
                     nextTrack = 0
                 else:
                     nextTrack = self.selectedTrack + 1
                 mixer.setActiveTrack(nextTrack)
-                event.handled = True
-                device.midiOutMsg(176, 144, 94, 3)
-            if event.data2 == 0:
                 event.handled = True
                 device.midiOutMsg(176, 144, 94, 1)
 
@@ -127,11 +112,6 @@ class MixerModule():
         layouts = {0:self.mixerVolume, 1:self.mixerPan, 2:self.mixerStereo, 3:self.mixerPolarity, 4:self.mixerSwapChannels, 5:self.mixerMute, 6:self.mixerSolo, 7:self.mixerRecordArm}
         if (currentScreen in [0, 13] and self.selectedView < 3): # Current Screen in Session or DAW Fader, and Selected View has Faders
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 247]))
-        if currentScreen in [0, 13]:
-            if self.selectedTrack != mixer.trackNumber():
-                self.updatePluginScrollArrows(-2)
-            else:
-                self.updatePluginScrollArrows(-1)
         layouts[self.selectedView]()
         self.setViewButton()
         
@@ -179,6 +159,7 @@ class MixerModule():
                 
     def mixerPolarity(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
         self.selectedTrack = mixer.trackNumber()
         offset = self.getOffset()
         for button in range(11, 19):
@@ -194,6 +175,7 @@ class MixerModule():
 
     def mixerSwapChannels(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
         self.selectedTrack = mixer.trackNumber()
         offset = self.getOffset()
         for button in range(11, 19):
@@ -209,6 +191,7 @@ class MixerModule():
 
     def mixerMute(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
         self.selectedTrack = mixer.trackNumber()
         offset = self.getOffset()
         for button in range(11, 19):
@@ -224,6 +207,7 @@ class MixerModule():
 
     def mixerSolo(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
         self.selectedTrack = mixer.trackNumber()
         offset = self.getOffset()
         for button in range(11, 19):
@@ -240,6 +224,7 @@ class MixerModule():
 
     def mixerRecordArm(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
         self.selectedTrack = mixer.trackNumber()
         offset = self.getOffset()
         for button in range(11, 19):
@@ -254,59 +239,6 @@ class MixerModule():
             device.midiOutMsg(144, 146, 11 + offset, 96)
         else:
             device.midiOutMsg(144, 144, 11 + offset, 10)
-
-    def updatePluginScrollArrows(self, direction):
-        self.selectedTrack = mixer.trackNumber()
-        if not self.calledByButton:
-            device.midiOutMsg(176, 144, 93, 1)
-            device.midiOutMsg(176, 144, 94, 1)
-        else:
-            self.calledByButton = False
-        if direction == -2: #Init and New Mixer
-            self.selectedPlugin = -1
-            device.midiOutMsg(176, 144, 91, 0)
-            device.midiOutMsg(176, 144, 92, 0)
-            for i in range(0,10):
-                if mixer.isTrackPluginValid(self.selectedTrack, i):
-                    self.selectedPlugin = i
-                    self.updatePluginScrollArrows(-1)
-                    break
-            if self.selectedPlugin == -1:
-                return    
-        if direction == -1: #Update lights only
-            if self.selectedPlugin < 1:
-                device.midiOutMsg(176, 144, 91, 0)
-            if self.selectedPlugin > 8:
-                device.midiOutMsg(176, 144, 92, 0)
-            for i in reversed(range(0, self.selectedPlugin)):
-                if i < 1 and not mixer.isTrackPluginValid(self.selectedTrack, i):
-                    device.midiOutMsg(176, 144, 91, 0)
-                    break
-                if mixer.isTrackPluginValid(self.selectedTrack, i):
-                    device.midiOutMsg(176, 144, 91, (i+1) * 4)
-                    break
-            for i in range(self.selectedPlugin + 1, 10):
-                if i > 8 and not mixer.isTrackPluginValid(self.selectedTrack, i):
-                    device.midiOutMsg(176, 144, 92, 0)
-                    break
-                if mixer.isTrackPluginValid(self.selectedTrack, i):
-                    device.midiOutMsg(176, 144, 92, (i+1) * 4)
-                    break
-        if direction == 0: #Up Arrow
-            for i in reversed(range(0, self.selectedPlugin)):
-                if mixer.isTrackPluginValid(self.selectedTrack, i):
-                    self.selectedPlugin = i
-                    break
-            self.updatePluginScrollArrows(-1)
-        if direction == 1: #Down Arrow
-            for i in range(self.selectedPlugin + 1, 10):
-                if mixer.isTrackPluginValid(self.selectedTrack, i):
-                    self.selectedPlugin = i
-                    break
-            self.updatePluginScrollArrows(-1)
-
-
-
             
     def userMixerInteraction(self): #Called when User interacts with Mixer
         if time.time() - self.timeSinceLastCall <= 0.3:
@@ -316,6 +248,14 @@ class MixerModule():
         layouts[self.selectedView]()
 
     def setViewButton(self): #Updates Arrows under Novation Logo
+        if playlist.getPerformanceModeState():
+            device.midiOutMsg(176, 176, 91, 69)
+        else:
+            device.midiOutMsg(176, 176, 91, 0)
+        device.midiOutMsg(176, 176, 92, 0)
+        device.midiOutMsg(176, 176, 93, 1)
+        device.midiOutMsg(176, 176, 94, 1)
+
         viewColor = {0:21, 1:9, 2:49, 3:53, 4:33, 5:13, 6:79, 7:5}
         viewButton = {0:89, 1:79, 2:69, 3:59, 4:49, 5:39, 6:29, 7:19}
         for i in range(0,8):

@@ -2,6 +2,7 @@ import device
 import plugins
 from math import floor
 import mixer
+import playlist
 
 class PluginFPC():
     def __init__(self) -> None:
@@ -40,10 +41,13 @@ class PluginFPC():
         self.chanIndex = chanIndex
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 0, 1, 0, 247])) #Clear Note Mode
         self.updateArrows(currentScreen)
-        device.midiOutMsg(176, 144, 91, 0)
-        device.midiOutMsg(176, 144, 92, 0)
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 1, 247])) # Update to Drum Rack
         self.updatePadsColor(chanIndex)
+        if currentScreen in [0,13]:
+            return
+        device.midiOutMsg(176, 144, 91, 0)
+        device.midiOutMsg(176, 144, 92, 0)
+        
         
     def updateArrows(self, currentScreen):
         if currentScreen in [0,13]:
@@ -147,7 +151,6 @@ class PluginGrossBeat():
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247]))
             self.mixerIndex = mixerIndex
             self.slotIndex = slotIndex
-            #print("param:", plugins.getParamName(0, self.mixerIndex, self.slotIndex))
             self.lastTimeVal = -1
             self.lastVolVal = -1
             self.updateArrows(currentScreen)
@@ -156,8 +159,12 @@ class PluginGrossBeat():
     def updateArrows(self, currentScreen):
         if currentScreen == 1:
             return
+        if playlist.getPerformanceModeState():
+            device.midiOutMsg(176, 176, 94, 69)
+        else:
+            device.midiOutMsg(176, 176, 94, 0)
+        device.midiOutMsg(176, 176, 92, 0)
         device.midiOutMsg(176, 144, 93, 0)
-        device.midiOutMsg(176, 144, 94, 0)
         if self.viewDown:
             device.midiOutMsg(176, 144, 91, 1)
             device.midiOutMsg(176, 144, 92, 0)  
@@ -227,7 +234,7 @@ def convertColor(color) -> int: #Convert gotten color to color in Launchpad X Co
                 RGBInt[i-1] = int(RGBSplit[i], 16) * 1.5
         return getPaletteColorFromRGB([RGBInt[0], RGBInt[1], RGBInt[2]])
 
-def getPaletteColorFromRGB(input: (int, int, int)) -> int: #Gets closest Palette Color to RGB
+def getPaletteColorFromRGB(input: (int, int, int)) -> int: #Gets closest Palette Color to RGB # type: ignore
         best_palette_match = 0
         best_palette_match_distance = (0.3 * (input[0] - palette[0][0])**2) + (0.6 * (input[1] - palette[0][1])**2) + (0.1 * (input[2] - palette[0][2])**2)
 
