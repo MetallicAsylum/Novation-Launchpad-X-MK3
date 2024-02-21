@@ -210,6 +210,7 @@ class LaunchpadX():
 
 
     def OnRefresh(self, flags):
+        print(flags)
         if flags == 4: #Mixer Interaction
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.userMixerInteraction()
@@ -219,7 +220,8 @@ class LaunchpadX():
                 device.midiOutMsg(176, mode, 99, 49)
             if self.isInPerformanceMode and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat" and performanceModule.currTab == 3:
                 performanceModule.tempoPicker()
-        if flags == 263: #New Mixer Selected
+        if flags == 263 or flags == 4359: #New Mixer Selected
+            print("test", self.FLCurrentWindow, self.isInPlugin)
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.updateMixerLayout(self.currentScreen, flags)
         if (flags == 260): #Record Button Change or Playing State Change
