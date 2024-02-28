@@ -121,6 +121,12 @@ class LaunchpadX():
                     self.updateNoteMode()
                     if self.channelPluginName == "FPC": #Note Mode, FPC DAW Drumrack
                         FPCModule.updateArrows(self.currentScreen)
+                if event.data1 == 97:
+                    self.currentScreen = 4
+                    mode = 178 if transport.isPlaying() else 176
+                    device.midiOutMsg(176, mode, 99, 49)
+                    device.midiOutSysex(bytes(layoutReadbackMsg))
+                    self.updateSession()
             event.handled = True
 
         if (event.data1 == 98 and event.status == 176): #Record + Dump Score
