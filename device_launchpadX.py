@@ -3,8 +3,8 @@
 # github = https://github.com/MetallicAsylum/Novation-Launchpad-X-MK3/
 """
 Developer: Maxwell Zentolight MaxwellZentolight@Gmail.com
-Version 1.3
-Date: 2/20/2024
+Version 1.4
+Date: 2/27/2024
 """
 
 import playlist
@@ -227,7 +227,6 @@ class LaunchpadX():
             if self.isInPerformanceMode and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat" and performanceModule.currTab == 3:
                 performanceModule.tempoPicker()
         if flags == 263 or flags == 4359: #New Mixer Selected
-            print("test", self.FLCurrentWindow, self.isInPlugin)
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.updateMixerLayout(self.currentScreen, flags)
         if (flags == 260): #Record Button Change or Playing State Change
@@ -274,8 +273,7 @@ class LaunchpadX():
         if effectFocus:
             effectLocation = mixer.getActiveEffectIndex()
         if channels.channelNumber(True) == -1 or not plugins.isValid(channels.channelNumber(),-1,True):
-            self.channelPluginName = ""
-            return
+            self.channelPluginName = "-1"
         if effectFocus and not plugins.isValid(effectLocation[0], effectLocation[1],True):
             self.mixerPluginName = ""
             return
@@ -284,7 +282,7 @@ class LaunchpadX():
         
         self.isInPlugin = True
         self.FLCurrentWindow = 1000
-        if channels.channelNumber() != 1:
+        if channels.channelNumber() != 1 and self.channelPluginName != "-1":
             self.channelPluginName = pluginName
             self.mixerPluginName = ""
         if effectFocus:
