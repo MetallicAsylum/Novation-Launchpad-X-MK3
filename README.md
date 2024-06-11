@@ -25,7 +25,7 @@ to be fixed.
 
 # Upcoming Feature Ideas:
 * Full Integration with the Browser, allowing you to select samples and play them back fully with just the launchpad.
-* Support for more 3rd=Party plugins such as Battery 4, Kontakt, and FL Synths that would benefit from having a specific UI on the launchpad.
+* Support for more 3rd-Party plugins such as Battery 4, Kontakt, and FL Synths that would benefit from having a specific UI on the launchpad.
 
 # Other Information:
 * Press and Hold the "Capture Midi" button to dump score to next empty pattern. Duration of how long to hold (Default: 0.5 seconds) and duration of score (Default: 45 seconds.)
