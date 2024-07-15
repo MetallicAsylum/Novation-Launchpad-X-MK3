@@ -15,8 +15,6 @@ your heart's content
 5. You know the script will be active if the "Session" button is now lit white!
 
 # Known Issues:
-* Default Mixer Track colors are not accurate for Users using Themes that have a shift in the Hue Knob, this seems to be an FL API error
-when getting a color that I have not found a workaround for.
 * In performance mode, the "Press" category "Hold and Motion" doesn't seem to work as expected, so it works the same as "Retrigger"
 until I can understand the undocumented way most of the flags work
 * FL Crashes when turning off the device sometimes, supposedly just an FL Bug with things running in the background, so hoping for it
