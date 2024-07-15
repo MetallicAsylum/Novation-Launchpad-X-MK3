@@ -3,8 +3,8 @@
 # github = https://github.com/MetallicAsylum/Novation-Launchpad-X-MK3/
 """
 Developer: Maxwell Zentolight MaxwellZentolight@Gmail.com
-Version 1.4
-Date: 2/27/2024
+Version 1.5
+Date: 7/15/2024
 """
 
 import playlist
@@ -220,6 +220,9 @@ class LaunchpadX():
         if flags == 4: #Mixer Interaction
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.userMixerInteraction()
+        if flags in [64, 320]:
+            if self.isInPerformanceMode != playlist.getPerformanceModeState():
+                self.updateSession()
         if flags == 256: #Metronome update
             if self.currentScreen in [0,13]:
                 mode = 178 if transport.isPlaying() else 176
@@ -306,7 +309,7 @@ class LaunchpadX():
         self.updateNoteMode()
 
     def updateSession(self):
-        if self.isInPerformanceMode and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat":
+        if playlist.getPerformanceModeState() and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat":
            self.updatePerformanceMode(-1)
            return
         elif (self.FLCurrentWindow == 0 and ui.getFocused(5) < 1): #Mixer, not in Plugin
@@ -346,7 +349,8 @@ class LaunchpadX():
         if self.currentScreen in [0, 13] and self.isInPerformanceMode:
             performanceModule.updatePerformanceLayout(self.currentScreen, lastTrack)
         else:
-            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, 49, 44, 247])) #Change Session colors
+            if self.isInPerformanceMode:
+                device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, 49, 44, 247])) #Change Session colors
 
     def updateRecordingButton(self):
         if (transport.isRecording()):

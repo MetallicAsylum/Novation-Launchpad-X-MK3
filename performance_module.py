@@ -257,15 +257,15 @@ class PerformanceModule():
                     playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2) #Clear Row
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 32) #Release Note
                 else: 
-                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2, event.data2) #Play Clip
+                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2)
                 
             elif (playlist.getLiveTriggerMode(padTrack + self.YOffset)) == 3:
                 if (playlist.getLiveBlockStatus(padTrack + self.YOffset, padNum + self.XOffset, 1) != 2):
-                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2, event.data2) #Play Clip
+                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
                     playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 1) #Mute Others
                 else:
                     playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2)
-                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2, event.data2) #Play Clip
+                    playlist.triggerLiveClip(padTrack + self.YOffset, padNum + self.XOffset, 2) #Play Clip
                     playlist.triggerLiveClip(padTrack + self.YOffset, -1, 2) #Stop All Clips
                 event.handled = True
             else:
