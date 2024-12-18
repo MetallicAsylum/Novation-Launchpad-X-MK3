@@ -19,16 +19,19 @@ import plugins
 import time
 from _thread import start_new_thread
 
-from mixer_module import MixerModule
-import plugin_module
-from performance_module import PerformanceModule
-from default_session import DefaultSessionModule
+import helpers
+import mixer_module
+import fpc_module
+import grossbeat_module
+import performance_module
+import default_session_module
 
-mixerModule = MixerModule()
-FPCModule = plugin_module.PluginFPC()
-grossBeatModule = plugin_module.PluginGrossBeat()
-performanceModule = PerformanceModule()
-defaultSessionModule = DefaultSessionModule()
+h = helpers.Helper()
+mixerModule = mixer_module.MixerModule()
+FPCModule = fpc_module.PluginFPC()
+grossBeatModule = grossbeat_module.PluginGrossBeat()
+performanceModule = performance_module.PerformanceModule()
+defaultSessionModule = default_session_module.DefaultSessionModule()
 
 holdLengthSeconds = 0.5
 timeFromDumpScoreLog = 45 #Seconds
@@ -36,7 +39,7 @@ layoutReadbackMsg = [0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0x00, 0xF7]
 
 class LaunchpadX():
     def __init__(self) -> None:
-        self.currentScreen = None #Initialized on OnInit, {0: Session, 1: Note Mode, [2,3 unused], 4-12: Custom Modes, 13: DAW Fader, 127: Programmer Mode}
+        self.currentScreen = None #Initialized on OnInit, {0: Session, 1: Note Mode/DAW Drum Rack, [2,3 unused], 4-12: Custom Modes, 13: DAW Fader, 127: Programmer Mode}
         self.timeCalled = 0 #Helper variable for button holds
 
         self.FLCurrentWindow = -1 #FL Window Constants, {0: Mixer, 1: Channel Rack, 2: Playlist, 3: Piano Roll, 4: Browser, 5: Plugin (general) 6: Effect Plugin, 7: Generator Plugin
@@ -53,10 +56,12 @@ class LaunchpadX():
         self.isInPlugin = False
         self.channelPluginName = "NONE"
         self.mixerPluginName = "NONE"
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Set Note Mode To Scale
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 1, 1, 247])) #Clear Session, Drum, and CC
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 23, 0, 247])) #Change Note Active color
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, 0, 0, 247])) #Change Session colors
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 1, 247]))        # Set View To Note Mode
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247]))       # Set Note Mode To Scale
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 1, 1, 247])) # Clear Session, Drum, and CC
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 23, 0, 247]))       # Change Note Active color
+        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, 0, 0, 247]))    # Change Session colors
+        self.updateNovationLogo()
 
     def OnInit(self):
         #Set Launchpad into DAW mode
@@ -108,23 +113,20 @@ class LaunchpadX():
                 device.midiOutSysex(bytes(layoutReadbackMsg))
                 if event.data1 == 95:
                     if self.currentScreen in [0, 13] and self.isInPerformanceMode and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat":
-                        performanceModule.overviewMode = not performanceModule.overviewMode
-                        performanceModule.updatePerformanceLayout(0, 500)
+                        performanceModule.toggleOverviewMode()
                     self.currentScreen = 0
-                    self.clearButtons()
+                    h.clearPads(0)
                     device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247]))
-                    mode = 178 if transport.isPlaying() else 176
-                    device.midiOutMsg(176, mode, 99, 49)
+                    self.updateNovationLogo()
                     self.updateSession()
                 if event.data1 == 96:
                     self.currentScreen = 1
                     self.updateNoteMode()
-                    if self.channelPluginName == "FPC": #Note Mode, FPC DAW Drumrack
+                    if self.channelPluginName == "FPC": #Note Mode, FPC DAW Drum Rack
                         FPCModule.updateArrows(self.currentScreen)
                 if event.data1 == 97:
                     self.currentScreen = 4
-                    mode = 178 if transport.isPlaying() else 176
-                    device.midiOutMsg(176, mode, 99, 49)
+                    self.updateNovationLogo()
                     device.midiOutSysex(bytes(layoutReadbackMsg))
                     self.updateSession()
             event.handled = True
@@ -133,7 +135,10 @@ class LaunchpadX():
             if (event.data2 == 127):
                 self.timeCalled = time.time()
                 event.handled = True
-                start_new_thread(self.checkHeld, ()) #Check when to dump score
+                try: # Raises Traceback, but Error doesn't effect anything and works fine.
+                    start_new_thread(self.checkHeld, ()) #Check when to dump score
+                except Exception:
+                    pass
 
             if (event.data2 == 0): #Handle if to record or dump score
                 event.handled = True
@@ -204,7 +209,7 @@ class LaunchpadX():
                 defaultSessionModule.OnControlChange(event, channels.channelNumber(True))
 
     def OnProjectLoad(self, status):
-        if status == 100:
+        if status in [0,100]:
             self.reset()
             mixerModule.reset()
             FPCModule.reset()
@@ -212,21 +217,17 @@ class LaunchpadX():
             performanceModule.reset()
             defaultSessionModule.reset()
             
-            
-
-
     def OnRefresh(self, flags):
-        print(flags)
         if flags == 4: #Mixer Interaction
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
                 mixerModule.userMixerInteraction()
         if flags in [64, 320]:
             if self.isInPerformanceMode != playlist.getPerformanceModeState():
                 self.updateSession()
-        if flags == 256: #Metronome update
+        if flags == 256: #Metronome/Transport update
+            self.updateRecordingButton()
             if self.currentScreen in [0,13]:
-                mode = 178 if transport.isPlaying() else 176
-                device.midiOutMsg(176, mode, 99, 49)
+                self.updateNovationLogo()
             if self.isInPerformanceMode and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat" and performanceModule.currTab == 3:
                 performanceModule.tempoPicker()
         if flags == 263 or flags == 4359: #New Mixer Selected
@@ -237,31 +238,23 @@ class LaunchpadX():
                 self.updateRecordingButton()
         if (flags == 17687) and self.FLCurrentWindow == 0 and not self.isInPlugin: #Plugin on Mixer Change
             mixerModule.updatePluginScrollArrows(0)
-        if (flags in [288, 32768, 65824, 66848, 65792, 98560]): #Channel Slot Change
+        if (flags in [288, 32768, 65824, 66848, 65792, 98560, 65847]): #Channel Slot Change
             self.updateNoteMode()
         if flags == 91463 or flags == 24871 or 16384 and self.channelPluginName == "FPC": #Preset Change, Color Update, or Note Select Update
             FPCModule.updatePadsColor(channels.channelNumber())
 
     def OnUpdateLiveMode(self, lastTrack):   
-        self.updatePerformanceMode(lastTrack)
+        self.updatePerformanceMode()
 
     def checkHeld(self):
         if time.time() - self.timeCalled > holdLengthSeconds:
-            device.midiOutMsg(176, 145, 98, 3)
+            h.lightPad(9,8,"WHITE",self.currentScreen,"FLASHING")
             if (patterns.isPatternDefault(patterns.patternNumber())) != 1:
                 patterns.findFirstNextEmptyPat(2)
             general.dumpScoreLog(timeFromDumpScoreLog, True)
             general.clearLog()
             self.timeCalled = -time.time()
             return
-    
-    def clearButtons(self): 
-        for button in range(11, 100):
-            if button in [19, 29, 39, 49, 59, 69, 79, 89, 91, 92, 93, 94, 95, 96, 97, 98, 99]:
-                input = 176 #CC Pads
-            else:
-                input = 144 #Note Pads
-            device.midiOutMsg(input, 144, button, 0)
 
     def updatePluginView(self):
         pluginFocus = ui.getFocused(5)
@@ -297,7 +290,7 @@ class LaunchpadX():
         performanceModeState = playlist.getPerformanceModeState()
         if performanceModeState != self.isInPerformanceMode:
             self.isInPerformanceMode = performanceModeState
-            self.updatePerformanceMode(-1)
+            self.updatePerformanceMode()
         pluginFocus = ui.getFocused(5)
         if pluginFocus:
             return
@@ -310,7 +303,7 @@ class LaunchpadX():
 
     def updateSession(self):
         if playlist.getPerformanceModeState() and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat":
-           self.updatePerformanceMode(-1)
+           self.updatePerformanceMode()
            return
         elif (self.FLCurrentWindow == 0 and ui.getFocused(5) < 1): #Mixer, not in Plugin
             mixerModule.updateMixerLayout(self.currentScreen, None)
@@ -337,7 +330,7 @@ class LaunchpadX():
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 23, 0, 247])) #Change Note Active color
             return
         self.channelPluginName = plugins.getPluginName(channels.channelNumber(), -1, False, True)
-        if self.channelPluginName == "FPC": #and self.mixerPluginName != "Edison":
+        if self.channelPluginName == "FPC":
             FPCModule.updateNoteMode(channels.channelNumber(), self.currentScreen)
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 23, 84, 247])) #Change Note Active color
         else:
@@ -345,20 +338,25 @@ class LaunchpadX():
                 device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 15, 0, 247])) #Change Note Mode to Scale
                 device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 23, 0, 247])) #Change Note Active color
     
-    def updatePerformanceMode(self, lastTrack):
+    def updatePerformanceMode(self):
         if self.currentScreen in [0, 13] and self.isInPerformanceMode:
-            performanceModule.updatePerformanceLayout(self.currentScreen, lastTrack)
+            performanceModule.updatePerformanceLayout()
         else:
             if self.isInPerformanceMode:
                 device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, 49, 44, 247])) #Change Session colors
 
     def updateRecordingButton(self):
         if (transport.isRecording()):
-            colorMode = lambda recording: 146 if recording else 144
-            device.midiOutMsg(176, colorMode(transport.isPlaying()), 98, 72)
+            colorMode = "PULSING" if transport.isPlaying() else "STATIC"
+            print("HERE", transport.isPlaying(), colorMode)
+            h.lightPad(9,8,"RED",self.currentScreen,colorMode)
         else:
-            device.midiOutMsg(176, 144, 98, 0)
+            h.lightPad(9,8,"OFF",self.currentScreen)
         self.timeCalled = -1
+    
+    def updateNovationLogo(self):
+        mode = "PULSING" if transport.isPlaying() else "STATIC"
+        h.lightPad(9,9,"PURPLE",mode,self.currentScreen)
        
 
 

@@ -1,20 +1,21 @@
 import device
 import channels
-import plugins
 import playlist
+import helpers
+h = helpers.Helper()
 
 class DefaultSessionModule():
     def __init__(self) -> None:
         self.pitchBendRange = 2 #In Semitones
-        self.selectedView = 0 # Arrows under Novation Logo
+        self.selectedView = 1 # Arrows under Novation Logo
 
     def reset(self):
         self.pitchBendRange = 2
-        self.selectedView = 0
+        self.selectedView = 1
 
     def OnMidiMsg(self, event):
         if event.data1 in [19, 29, 39, 49, 59, 69, 79, 89] and event.data2 == 127: # Arrows under Novation Logo
-            viewButton = {19:7, 29:6, 39:5, 49:4, 59:3, 69:2, 79:1, 89:0} #Views corresponding to arrows
+            viewButton = {19:8, 29:7, 39:6, 49:5, 59:4, 69:3, 79:2, 89:1} #Views corresponding to arrows
             self.selectedView = viewButton[event.data1]
             self.updateLayout(13)
 
@@ -23,45 +24,32 @@ class DefaultSessionModule():
             return
         if event.controlNum == 8: #Pitch Bend Fader
             if channels.channelNumber(True) != -1:
-                channels.setChannelPitch(channels.channelNumber(True), self.CCToKnob(event.controlVal))
+                channels.setChannelPitch(channels.channelNumber(True), h.FaderPosToKnob(event.controlVal))
                 event.handled = True
 
     def updateLayout(self, currentScreen):
-        layouts = {0:self.lay0, 1:self.lay1, 2:self.lay2, 3:self.lay3, 4:self.lay4, 5:self.lay5, 6:self.lay6, 7:self.lay7}
+        layouts = {1:self.lay0, 2:self.lay1, 3:self.lay2, 4:self.lay3, 5:self.lay4, 6:self.lay5, 7:self.lay6, 8:self.lay7}
         if (currentScreen in [0, 13]):
             device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 13, 247])) #DAW Fader Mode
         layouts[self.selectedView]()
         if not playlist.getPerformanceModeState():
-            for i in range (91, 95):
-                device.midiOutMsg(176, 176, i, 0)
-        #if channels.channelNumber(True) != -1:
-            #if plugins.isValid(channels.channelNumber(True),-1,True):
-                #self.pitchBendRange = channels.getChannelPitch(channels.channelNumber(True), 2, True)
+            for i in range (1, 5):
+                h.lightPad(9,i,"OFF",currentScreen)
 
-        viewColor = {0:21, 1:9, 2:49, 3:53, 4:33, 5:13, 6:79, 7:5}
-        viewButton = {0:89, 1:79, 2:69, 3:59, 4:49, 5:39, 6:29, 7:19}
-        for i in range(0,8): #Update Arrow Colors
+        viewColor = {1:"LIGHT_GREEN", 2:"ORANGE", 3:"PURPLE", 4:"MAGENTA", 5:"CYAN", 6:"YELLOW", 7:"BLUE", 8:"RED"}
+        for i in range(1,9): #Update Arrow Colors
             if i == self.selectedView:
-                device.midiOutMsg(176, 144, viewButton[i], viewColor[self.selectedView])
+                h.lightPad(9-i,9,viewColor[i],currentScreen)
             else:
-                device.midiOutMsg(176, 144, viewButton[i], 1)
+                h.lightPad(9-i,9,"DARK_GRAY",currentScreen)
         if currentScreen == 0:
-            for i in range(91,95):
-                device.midiOutMsg(176, 176, i, 0)
-
-
+            for i in range(1,5):
+                h.lightPad(9,i,"OFF",currentScreen)
 
     def lay0(self):
         #For all of these Sysex Messages, they just set the faders and corresponding CC messages to be assigned by User,
-        #except CC0-8 which 0-7 is Mixer and 8 is Pitch Bend
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 1, 11, 9,  1, 0, 12, 41,  2, 0, 13, 50, 3, 0, 14, 50,  4, 0, 15, 50, 5, 0, 16, 50,  6, 0, 17, 50,  7, 0, 18, 50,          247]))
-        #if channels.channelNumber(True) == -1:
-            #return
-        #if plugins.isValid(channels.channelNumber(True),-1,True):
-            #print("chan:", channels.channelNumber())
-            #device.midiOutMsg(180, 180, 8, self.knobToCC(channels.getChannelPitch(channels.selectedChannel(True),0,True)))
-
-                
+        h.changeFaderValue(1,0,"KNOB")
 
     def lay1(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 0, 21, 50,  1, 0, 22, 50,  2, 0, 23, 50, 3, 0, 24, 50,  4, 0, 25, 50, 5, 0, 26, 50,  6, 0, 27, 50,  7, 0, 28, 50,          247]))
@@ -80,18 +68,9 @@ class DefaultSessionModule():
 
     def lay6(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 1, 71, 50,  1, 1, 72, 50,  2, 1, 73, 50, 3, 1, 74, 50,  4, 1, 75, 50, 5, 1, 76, 50,  6, 1, 77, 50,  7, 1, 78, 50,          247]))
-
+        for i in range(1,9):
+            h.changeFaderValue(i,0,"KNOB")
     def lay7(self):
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 1,     0, 1, 81, 50,  1, 1, 82, 50,  2, 1, 83, 50, 3, 1, 84, 50,  4, 1, 85, 50, 5, 1, 86, 50,  6, 1, 87, 50,  7, 1, 88, 50,          247]))
-
-    def knobToCC(self, knob) -> int: #Knob Value to Fader Position
-        if (knob < 0):
-            return round(63 * (knob + 1))
-        else:
-            return round((63 * (knob + 1)) + 1)
-        
-    def CCToKnob(self, CC) -> float: #Fader Position to Knob Value
-        if (CC <= 63):
-            return (CC / 63) - 1
-        else:
-            return ((CC - 1) / 63) - 1
+        for i in range(1,9):
+            h.changeFaderValue(i,0,"KNOB")

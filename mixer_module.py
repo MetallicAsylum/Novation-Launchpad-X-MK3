@@ -2,6 +2,8 @@ import mixer
 import device
 import time
 import playlist
+import helpers
+h = helpers.Helper()
 
 class MixerModule():
     def __init__(self) -> None:
@@ -20,226 +22,82 @@ class MixerModule():
     def OnMidiMsg(self, event):
         if event.data1 in [19, 29, 39, 49, 59, 69, 79, 89] and event.data2 == 127: #Press of Arrows under Novation Light
             viewButton = {19:7, 29:6, 39:5, 49:4, 59:3, 69:2, 79:1, 89:0}
-            if viewButton[event.data1] == self.selectedView:
-                mixer.focusEditor(self.selectedTrack, self.selectedPlugin)
-                return
             self.selectedView = viewButton[event.data1]
             self.updateMixerLayout(0, None)
-        if event.data1 == 93: #Left Arrow
+        if event.data1 in [93, 94]: # Left and Right Arrow
             self.calledByButton = True
             if event.data2 == 127:
-                event.handled = True
-                device.midiOutMsg(176, 144, 93, 3)
-            if event.data2 == 0:
-                if self.selectedTrack == 0:
-                    prevTrack = 126
-                else:
-                    prevTrack = self.selectedTrack - 1
-                mixer.setActiveTrack(prevTrack)
-                event.handled = True
-                device.midiOutMsg(176, 144, 93, 1)
-        if event.data1 == 94: #Right Arrow
-            if event.data2 == 127:
-                device.midiOutMsg(176, 144, 94, 3)
+                h.lightPad(9,event.data1%10,"WHITE",0)
                 event.handled = True
             if event.data2 == 0:
-                self.calledByButton = True
-                if self.selectedTrack == 126:
-                    nextTrack = 0
+                if event.data1 == 93:
+                    newTrack = 126 if self.selectedTrack == 0 else self.selectedTrack-1
                 else:
-                    nextTrack = self.selectedTrack + 1
-                mixer.setActiveTrack(nextTrack)
+                    newTrack = 0 if self.selectedTrack == 126 else self.selectedTrack+1
+                mixer.setActiveTrack(newTrack)
+                h.lightPad(9,3,"DARK_GRAY",0)
                 event.handled = True
-                device.midiOutMsg(176, 144, 94, 1)
 
     def OnControlChange(self, event):
         #Handle each Fader Function for each different View
-        if (self.selectedView == 0): #Volume
+        mixerAction = {0:mixer.setTrackVolume,1:mixer.setTrackPan,2:mixer.setTrackStereoSep,3:mixer.revTrackPolarity,4:mixer.swapTrackChannels,5:mixer.muteTrack,6:mixer.soloTrack,7:mixer.armTrack}
+        offset = self.getOffset()
+        if (self.selectedView < 3):
             if (event.controlNum < 8):
-                offset = self.getOffset()
                 self.timeSinceLastCall = time.time()
+                helpFunc = h.FaderPosToVol if self.selectedView == 0 else h.FaderPosToKnob
+                mixerAction[self.selectedView]((self.selectedTrack+1) + (event.controlNum - offset), helpFunc(event.controlVal))
                 event.handled = True
-                mixer.setTrackVolume(self.selectedTrack + (event.controlNum - offset), self.CCToVol(event.controlVal))
-        if (self.selectedView == 1): #Pan
-            if (event.controlNum < 8):
-                offset = self.getOffset()
-                self.timeSinceLastCall = time.time()
-                event.handled = True
-                mixer.setTrackPan(self.selectedTrack + (event.controlNum - offset), self.CCToKnob(event.controlVal))
-        if (self.selectedView == 2): #Stereo Seperation
-            if (event.controlNum < 8):
-                offset = self.getOffset()
-                self.timeSinceLastCall = time.time()
-                event.handled = True
-                mixer.setTrackStereoSep(self.selectedTrack + (event.controlNum - offset), self.CCToKnob(event.controlVal))
-        if (self.selectedView == 3): #Reverse Polarity
-            offset = self.getOffset()
+        elif (self.selectedView < 8):
             if event.controlNum > 10 and event.controlNum < 19 and event.controlVal > 0:
-                if mixer.isTrackRevPolarity(self.selectedTrack + ((event.controlNum - 11) - offset)):
-                    mixer.revTrackPolarity(self.selectedTrack + ((event.controlNum - 11) - offset), False)
+                valCheck = {3:mixer.isTrackRevPolarity,4:mixer.isTrackSwapChannels}
+                if self.selectedView in [3,4]:
+                    mode = False if valCheck[self.selectedView]((self.selectedTrack+1) + ((event.controlNum - 11) - offset)) else True
                 else:
-                    mixer.revTrackPolarity(self.selectedTrack + ((event.controlNum - 11) - offset), True)
-                self.mixerPolarity()
-        if (self.selectedView == 4): #Swap Channels
-            offset = self.getOffset()
-            if event.controlNum > 10 and event.controlNum < 19 and event.controlVal > 0:
-                if mixer.isTrackSwapChannels(self.selectedTrack + ((event.controlNum - 11) - offset)):
-                    mixer.swapTrackChannels(self.selectedTrack + ((event.controlNum - 11) - offset), False)
-                else:
-                    mixer.swapTrackChannels(self.selectedTrack + ((event.controlNum - 11) - offset), True)
-                self.mixerSwapChannels()
-        if (self.selectedView == 5): #Mute Track
-            offset = self.getOffset()
-            if event.controlNum > 10 and event.controlNum < 19 and event.controlVal > 0:
-                mixer.muteTrack(self.selectedTrack + ((event.controlNum - 11) - offset))
-                self.mixerMute()
-        if (self.selectedView == 6): #Solo Track
-            offset = self.getOffset()
-            if event.controlNum > 10 and event.controlNum < 19 and event.controlVal > 0:
-                mixer.soloTrack(self.selectedTrack + ((event.controlNum - 11) - offset), -1, 3)
-                self.mixerSolo()
-        if (self.selectedView == 7): #Arm Track for Recording
-            offset = self.getOffset()
-            if event.controlNum > 10 and event.controlNum < 19 and event.controlVal > 0:
-                mixer.armTrack(self.selectedTrack + ((event.controlNum - 11) - offset))
-                self.mixerRecordArm()
+                    mode = -1
+                mixerAction[self.selectedView]((self.selectedTrack+1) + ((event.controlNum - 11) - offset), mode)
+                self.updateLights(layouts[self.selectedView])
 
     def activateDAWFader(self):
         #Sets Launchpad into DAW Fader Mode
         device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 13, 247]))
 
     def updateMixerLayout(self, currentScreen, flag):
-        layouts = {0:self.mixerVolume, 1:self.mixerPan, 2:self.mixerStereo, 3:self.mixerPolarity, 4:self.mixerSwapChannels, 5:self.mixerMute, 6:self.mixerSolo, 7:self.mixerRecordArm}
         if (currentScreen in [0, 13] and self.selectedView < 3): # Current Screen in Session or DAW Fader, and Selected View has Faders
-            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 247]))
-        layouts[self.selectedView]()
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 247])) # Makes sure Session is in DAW Fader
+        self.updateLights(layouts[self.selectedView])
         self.setViewButton()
-        
-    def mixerVolume(self):
-        #Sets DAW Faders
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 0, 0, 50,  1, 0, 1, 50,  2, 0, 2, 50, 3, 0, 3, 50,  4, 0, 4, 50, 5, 0, 5, 50,  6, 0, 6, 50,  7, 0, 7, 50,          247]))
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for i in range(0, 8):
-            device.midiOutMsg(180, 180, i, self.volToCC(mixer.getTrackVolume(self.selectedTrack + (i-offset))))
-            device.midiOutMsg(181, 181, i, self.convertColor(mixer.getTrackColor(self.selectedTrack + (i-offset))))
-        device.midiOutMsg(181, 181, offset, 96)
-    
-    def mixerPan(self):
-        #Sets DAW Faders
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 1,     0, 1, 0, 50,  1, 1, 1, 50,  2, 1, 2, 50, 3, 1, 3, 50,  4, 1, 4, 50, 5, 1, 5, 50,  6, 1, 6, 50,  7, 1, 7, 50,          247]))
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for i in range(0, 8):
-            device.midiOutMsg(180, 180, i, self.knobToCC(mixer.getTrackPan(self.selectedTrack + (i-offset))))
-            device.midiOutMsg(181, 181, i, self.convertColor(mixer.getTrackColor(self.selectedTrack + (i-offset))))
-        device.midiOutMsg(181, 181, offset, 96)
 
-    def mixerStereo(self):
-        #Sets DAW Faders
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 1,     0, 1, 0, 50,  1, 1, 1, 50,  2, 1, 2, 50, 3, 1, 3, 50,  4, 1, 4, 50, 5, 1, 5, 50,  6, 1, 6, 50,  7, 1, 7, 50,          247]))
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for i in range(0, 8):
-            device.midiOutMsg(180, 180, i, self.knobToCC(mixer.getTrackStereoSep(self.selectedTrack + (i-offset))))
-            device.midiOutMsg(181, 181, i, self.convertColor(mixer.getTrackColor(self.selectedTrack + (i-offset))))
-        device.midiOutMsg(181, 181, offset, 96)
-
-    def mixerMasterSend(self):
-        #Sets DAW Faders
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 0, 0, 50,  1, 0, 1, 50,  2, 0, 2, 50, 3, 0, 3, 50,  4, 0, 4, 50, 5, 0, 5, 50,  6, 0, 6, 50,  7, 0, 7, 50,          247]))
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for i in range(0, 8):
-            if mixer.getRouteSendActive(self.selectedTrack + (i-offset), 0):
-                device.midiOutMsg(180, 180, i, self.volToCC(mixer.getTrackVolume(self.selectedTrack + (i-offset))))
-                device.midiOutMsg(181, 181, i, self.convertColor(mixer.getTrackColor(self.selectedTrack + (i-offset))))
-
-        device.midiOutMsg(181, 181, offset, 96)
-                
-    def mixerPolarity(self):
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for button in range(11, 19):
-            if (mixer.isTrackRevPolarity(self.selectedTrack + ((button - 11) - offset))):
-                color = self.convertColor(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-            else:
-                color = self.convertColorDull(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-            device.midiOutMsg(144, 144, button, color)
-        if mixer.isTrackRevPolarity(self.selectedTrack):
-            device.midiOutMsg(144, 144, 11 + offset, 96)
+    def updateLights(self,view:str) -> None:
+        if view == "VOL":
+            # Sets to Regular DAW Fader
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 0,     0, 0, 0, 50,  1, 0, 1, 50,  2, 0, 2, 50, 3, 0, 3, 50,  4, 0, 4, 50, 5, 0, 5, 50,  6, 0, 6, 50,  7, 0, 7, 50,          247]))
+        elif view in ["PAN", "STEREO"]:
+            # Sets to Polar DAW Fader
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 1, 0, 1,     0, 1, 0, 50,  1, 1, 1, 50,  2, 1, 2, 50, 3, 1, 3, 50,  4, 1, 4, 50, 5, 1, 5, 50,  6, 1, 6, 50,  7, 1, 7, 50,          247]))
         else:
-            device.midiOutMsg(144, 144, 11 + offset, 10)
-
-    def mixerSwapChannels(self):
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247]))        #Sets Session to Session View, not DAW Fader
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
         self.selectedTrack = mixer.trackNumber()
         offset = self.getOffset()
-        for button in range(11, 19):
-            if (mixer.isTrackSwapChannels(self.selectedTrack + ((button - 11) - offset))):
-                color = self.convertColor(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
+        mixerAction = {"VOL":mixer.getTrackVolume, "PAN":mixer.getTrackPan, "STEREO":mixer.getTrackStereoSep, "POLARITY":mixer.isTrackRevPolarity, "SWAP":mixer.isTrackSwapChannels, "MUTE":mixer.isTrackMuted, "SOLO":mixer.isTrackSolo, "ARM":mixer.isTrackArmed}
+        if view in ["VOL", "PAN", "STEREO"]:
+            mode = "VOL" if view == "VOL" else "KNOB"
+            for i in range(1, 9):
+                h.lightPad(0,i,mixer.getTrackColor((self.selectedTrack+1) + ((i-1)-offset)),13,9)
+                h.changeFaderValue(i,mixerAction[view]((self.selectedTrack+1) + ((i-1)-offset)),mode)
+            h.lightPad(0,offset,"ORANGE",13)
+        elif view in ["POLARITY", "SWAP", "MUTE", "SOLO", "ARM"]:
+            for i in range(1, 9):
+                if (mixerAction[view]((self.selectedTrack+1) + ((i-1) - offset))):
+                    h.lightPad(1,i,mixer.getTrackColor((self.selectedTrack+1) + ((i-1) - offset)),0)
+                else:
+                    h.lightPad(1,i,mixer.getTrackColor((self.selectedTrack+1) + ((i-1) - offset)),0,"DULL")
+            if mixerAction[view](self.selectedTrack):
+                h.lightPad(1,offset,"ORANGE",0)
             else:
-                color = self.convertColorDull(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-            device.midiOutMsg(144, 144, button, color)
-        if mixer.isTrackSwapChannels(self.selectedTrack):
-            device.midiOutMsg(144, 144, 11 + offset, 96)
-        else:
-            device.midiOutMsg(144, 144, 11 + offset, 10)
+                h.lightPad(1,offset,"BROWN",0)
 
-    def mixerMute(self):
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for button in range(11, 19):
-            if (mixer.isTrackMuted(self.selectedTrack + ((button - 11) - offset))):
-                color = self.convertColorDull(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-            else:
-                color = self.convertColor(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-            device.midiOutMsg(144, 144, button, color)
-        if mixer.isTrackMuted(self.selectedTrack):
-            device.midiOutMsg(144, 144, 11 + offset, 10)
-        else:
-            device.midiOutMsg(144, 144, 11 + offset, 96)
-
-    def mixerSolo(self):
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for button in range(11, 19):
-            if (mixer.isTrackSolo(self.selectedTrack + ((button - 11) - offset))):
-                color = self.convertColor(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-            else:
-                color = self.convertColorDull(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-                
-            device.midiOutMsg(144, 144, button, color)
-        if mixer.isTrackSolo(self.selectedTrack):
-            device.midiOutMsg(144, 144, 11 + offset, 96)
-        else:
-            device.midiOutMsg(144, 144, 11 + offset, 10)
-
-    def mixerRecordArm(self):
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 0, 0, 247])) #Sets Session to Session View, not DAW Fader
-        device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 18, 1, 0, 0, 247])) #Clear Session
-        self.selectedTrack = mixer.trackNumber()
-        offset = self.getOffset()
-        for button in range(11, 19):
-            if (mixer.isTrackArmed(self.selectedTrack + ((button - 11) - offset))):
-                color = self.convertColor(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-                mode = 146
-            else:
-                color = self.convertColorDull(mixer.getTrackColor(self.selectedTrack + ((button - 11) - offset)))
-                mode = 144
-            device.midiOutMsg(144, mode, button, color)
-        if mixer.isTrackArmed(self.selectedTrack):
-            device.midiOutMsg(144, 146, 11 + offset, 96)
-        else:
-            device.midiOutMsg(144, 144, 11 + offset, 10)
-            
     def userMixerInteraction(self): #Called when User interacts with Mixer
         if time.time() - self.timeSinceLastCall <= 0.3:
             return
@@ -249,214 +107,26 @@ class MixerModule():
 
     def setViewButton(self): #Updates Arrows under Novation Logo
         if playlist.getPerformanceModeState():
-            device.midiOutMsg(176, 176, 91, 69)
+            h.lightPad(9,1,"PURPLE",0)
         else:
-            device.midiOutMsg(176, 176, 91, 0)
-        device.midiOutMsg(176, 176, 92, 0)
-        device.midiOutMsg(176, 176, 93, 1)
-        device.midiOutMsg(176, 176, 94, 1)
+            h.lightPad(9,1,"OFF",0)
+        h.lightPad(9,2,"OFF",0)
+        h.lightPad(9,3,"DARK_GRAY",0)
+        h.lightPad(9,4,"DARK_GRAY",0)
 
-        viewColor = {0:21, 1:9, 2:49, 3:53, 4:33, 5:13, 6:79, 7:5}
-        viewButton = {0:89, 1:79, 2:69, 3:59, 4:49, 5:39, 6:29, 7:19}
-        for i in range(0,8):
-            if i == self.selectedView:
-                device.midiOutMsg(176, 144, viewButton[i], viewColor[self.selectedView])
+        viewColor = {1:"LIGHT_GREEN", 2:"ORANGE", 3:"PURPLE", 4:"MAGENTA", 5:"CYAN", 6:"YELLOW", 7:"BLUE", 8:"RED"}
+        for i in range(1,9):
+            if i == self.selectedView+1:
+                h.lightPad(9-i,9,viewColor[i],0)
             else:
-                device.midiOutMsg(176, 144, viewButton[i], 1)
+                h.lightPad(9-i,9,"DARK_GRAY",0)
 
     def getOffset(self) -> int: #Gets track offset for extremes, with 0 being Master (least) and Current being 126 (most)
         if (self.selectedTrack - 3 <= 0):
-            return self.selectedTrack
+            return self.selectedTrack+1
         elif (self.selectedTrack + 4 >= 126):
-            return self.selectedTrack - 119
+            return (self.selectedTrack - 119)+1
         else:
-            return 3
+            return 4
 
-    def volToCC(self, volume) -> int: #Volume to Fader Position
-        if (volume <= 0.8):
-            return round(volume * 135)
-        else:
-            return round((volume * 95) + 32)
-        
-    def CCToVol(self, CC) -> float: #Fader Position to Volume
-        if (CC <= 108):
-            return CC/135
-        else:
-            return ((CC-32)/95)
-        
-    def knobToCC(self, knob) -> int: #Knob Value to Fader Position
-        if (knob < 0):
-            return round(63 * (knob + 1))
-        else:
-            return round((63 * (knob + 1)) + 1)
-        
-    def CCToKnob(self, CC) -> float: #Fader Position to Knob Value
-        if (CC <= 63):
-            return (CC / 63) - 1
-        else:
-            return ((CC - 1) / 63) - 1
-
-    def convertColor(self, color) -> int: #Convert gotten color to color in Launchpad X Color Palette
-        RGBHex = hex(16777216 + color)
-        RGBSplit = [RGBHex[i:i+2] for i in range(0, len(RGBHex), 2)]
-        RGBInt = [int, int, int]
-        for i in range(1,4):
-            if (int(RGBSplit[i], 16) * 1.5) > 254:
-                RGBInt[i-1] = 255
-            else:
-                RGBInt[i-1] = int(RGBSplit[i], 16) * 1.5
-        return self.getPaletteColorFromRGB([RGBInt[0], RGBInt[1], RGBInt[2]])
-
-    def convertColorDull(self, color) -> int: #Convert gotten color to color in Launchpad X Color Palette but less saturated
-        RGBHex = hex(16777216 + color)
-        RGBSplit = [RGBHex[i:i+2] for i in range(0, len(RGBHex), 2)]
-        RGBInt = [int, int, int]
-        for i in range(1,4):
-            if (int(RGBSplit[i], 16) + 16) > 254:
-                RGBInt[i-1] = 255
-            else:
-                RGBInt[i-1] = int(RGBSplit[i], 16) + 16
-        return self.getPaletteColorFromRGB([RGBInt[0], RGBInt[1], RGBInt[2]])
-    
-    def getPaletteColorFromRGB(self, input: (int, int, int)) -> int: #Gets closest Palette Color to RGB # type: ignore
-        best_palette_match = 0
-        best_palette_match_distance = (0.3 * (input[0] - palette[0][0])**2) + (0.6 * (input[1] - palette[0][1])**2) + (0.1 * (input[2] - palette[0][2])**2)
-
-        # we already checked [0]
-        for i in range(1, len(palette)):
-            distance = (0.3 * (input[0] - palette[i][0])**2) + (0.6 * (input[1] - palette[i][1])**2) + (0.1 * (input[2] - palette[i][2])**2)
-            if distance < best_palette_match_distance:
-                best_palette_match = i
-                best_palette_match_distance = distance
-
-        return best_palette_match + 1
-# Pad 0 Removed, so all entries start from 1
-palette = [ #Launchpad X Color Palette
-(179,179,179),
-(221,221,221),
-(255,255,255),
-(255,179,179),
-(255,97,97),
-(221,97,97),
-(179,97,97),
-(255,243,213),
-(255,179,97), # Pad 9
-(221,140,97),
-(179,118,97),
-(255,238,161),
-(255,255,97),
-(221,221,97),
-(179,179,97),
-(221,255,161),
-(194,255,97),
-(161,221,97),
-(129,179,97),
-(194,255,179),
-(97,255,97),
-(97,221,97),
-(97,179,97),
-(194,255,194),
-(97,255,140),
-(97,221,118),
-(97,179,107),
-(194,255,204),
-(97,255,204),
-(97,221,161),
-(97,179,129),
-(194,255,243),
-(97,255,233),
-(97,221,194),
-(97,179,150),
-(194,243,255),
-(97,238,255),
-(97,199,221),
-(97,161,179),
-(194,221,255),
-(97,199,255),
-(97,161,221),
-(97,129,179),
-(161,140,255),
-(97,97,255),
-(97,97,221),
-(97,97,179),
-(204,179,255),
-(161,97,255),
-(129,97,221),
-(118,97,179),
-(255,179,255),
-(255,97,255),
-(221,97,221),
-(179,97,179),
-(255,179,213),
-(255,97,194),
-(221,97,161),
-(179,97,140),
-(255,118,97),
-(233,179,97),
-(221,194,97),
-(161,161,97),
-(97,179,97),
-(97,179,140),
-(97,140,213),
-(97,97,255),
-(97,179,179),
-(140,97,243),
-(204,179,194),
-(140,118,129),
-(255,97,97),
-(243,255,161),
-(238,252,97),
-(204,255,97),
-(118,221,97),
-(97,255,204),
-(97,233,255),
-(97,161,255),
-(140,97,255),
-(204,97,252),
-(238,140,221),
-(161,118,97),
-(255,161,97),
-(221,249,97),
-(213,255,140),
-(97,255,97),
-(179,255,161),
-(204,252,213),
-(179,255,246),
-(204,228,255),
-(161,194,246),
-(213,194,249),
-(249,140,255),
-(255,97,204),
-(255,179,97), # Pad 96 changed to Pad 9 to keep color from being picked (Selection Color)
-(243,238,97),
-(228,255,97),
-(221,204,97),
-(179,161,97),
-(97,186,118),
-(118,194,140),
-(129,129,161),
-(129,140,204),
-(204,170,129),
-(221,97,97),
-(249,179,161),
-(249,186,118), 
-(255,243,140),
-(233,249,161),
-(213,238,118),
-(255,255,255),
-(249,249,213),
-(221,252,228),
-(233,233,255),
-(228,213,255),
-(179,179,179),
-(213,213,213),
-(249,255,255),
-(233,97,97),
-(170,97,97),
-(129,246,97),
-(97,179,97),
-(243,238,97),
-(179,161,97),
-(238,194,97),
-(194,118,97),
-]
+layouts = {0:"VOL",1:"PAN",2:"STEREO",3:"POLARITY",4:"SWAP",5:"MUTE",6:"SOLO",7:"ARM"}
