@@ -142,7 +142,7 @@ class PerformanceModule():
 
     def MidiMsgOverview(self, event):
         # Pad 79 is LIGHT Light Green
-        color = {89:"LIGHT_GREEN",79:88,69:"ORANGE",59:"CYAN"}
+        color = {89:"LIGHT_GREEN",79:88,69:"ORANGE",59:"CYAN", 19:"MAGENTA"}
         if event.data1 in [89,79,69,59]:
             if event.data2 == 127:
                 self.padToLightPad(event.data1,color[event.data1],0)
@@ -150,6 +150,19 @@ class PerformanceModule():
                 self.currTab = 9-floor(event.data1/10)
                 self.overviewMode = False
                 self.updatePerformanceLayout()
+        if event.data1 == 19:
+            if event.data2 == 127:
+                self.padToLightPad(event.data1,color[event.data1],0)
+            else:
+                h.clearPads(0,True)
+                h.toggleAnimationMode()
+                if not helpers.Helper().isAnimationMode:
+                    self.updatePerformanceLayout()
+                else:
+                    self.currTab = 0
+                    self.overviewMode = False
+                    device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, 1, 49, 247])) #Change Session colors
+                    self.updatePerformanceLayout()
         event.handled = True
 
     def updateCurrentTab(self, event):
@@ -296,8 +309,7 @@ class PerformanceModule():
 
         for i in range(1,5):
             h.lightPad(9,i,"OFF",0)
-
-        viewColor = {1:"OFF", 2:"OFF", 3:"OFF", 4:"OFF", 5:35, 6:"BROWN", 7:19, 8:"DARK_GREEN"}
+        viewColor = {1:"PURPLE", 2:"OFF", 3:"OFF", 4:"OFF", 5:35, 6:"BROWN", 7:19, 8:"DARK_GREEN"}
         for i in range(1,9):
             h.lightPad(i,9,viewColor[i],0)
         

@@ -3,10 +3,11 @@
 # github = https://github.com/MetallicAsylum/Novation-Launchpad-X-MK3/
 """
 Developer: Maxwell Zentolight MaxwellZentolight@Gmail.com
-Version 1.6
-Date: 12/18/2024
+Version 1.7
+Date: 12/28/2024
 """
 
+from math import floor
 import playlist
 import channels
 import patterns
@@ -112,6 +113,10 @@ class LaunchpadX():
             if (event.data2 == 127):
                 device.midiOutSysex(bytes(layoutReadbackMsg))
                 if event.data1 == 95:
+                    if helpers.Helper().isAnimationMode:
+                        helpers.Helper().toggleAnimationMode()
+                        performanceModule.updatePerformanceLayout()
+                        return
                     if self.currentScreen in [0, 13] and self.isInPerformanceMode and self.FLCurrentWindow != 0 and self.mixerPluginName != "Gross Beat":
                         performanceModule.toggleOverviewMode()
                     self.currentScreen = 0
@@ -216,7 +221,22 @@ class LaunchpadX():
             grossBeatModule.reset()
             performanceModule.reset()
             defaultSessionModule.reset()
-            
+            h.reset()
+
+    def OnMidiOutMsg(self, event):
+        helpers.Helper.toggleAnimationMode()
+        event.data1 = event.data1-1
+        if event.midiId == 128:
+            event.data2 = 0
+        h.lightPad(floor(event.data1/10),event.data1%10,event.data2,0)
+        if event.data1 == 95:
+            if event.data2 == 0:
+                event.data2 = 1
+            device.midiOutSysex(bytes([240, 0, 32, 41, 2, 12, 20, event.data2, 49, 247])) #Change Session colors
+
+        helpers.Helper.toggleAnimationMode()
+        event.handled = True
+
     def OnRefresh(self, flags):
         if flags == 4: #Mixer Interaction
             if self.FLCurrentWindow == 0 and not self.isInPlugin:
@@ -348,7 +368,6 @@ class LaunchpadX():
     def updateRecordingButton(self):
         if (transport.isRecording()):
             colorMode = "PULSING" if transport.isPlaying() else "STATIC"
-            print("HERE", transport.isPlaying(), colorMode)
             h.lightPad(9,8,"RED",self.currentScreen,colorMode)
         else:
             h.lightPad(9,8,"OFF",self.currentScreen)
@@ -376,6 +395,9 @@ def OnMidiIn(event):
 
 def OnMidiMsg(event):
     Launchpad.OnMidiMsg(event)
+
+def OnMidiOutMsg(event):
+    Launchpad.OnMidiOutMsg(event)
 
 def OnNoteOn(event):
     Launchpad.OnNoteOn(event)

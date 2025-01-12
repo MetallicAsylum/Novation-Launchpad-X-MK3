@@ -1,6 +1,15 @@
 import device
 
 class Helper():
+    isAnimationMode = False
+    @staticmethod
+    def toggleAnimationMode():
+        """Used for Toggling Custom Animation Mode (Lightshow Mode)"""
+        Helper.isAnimationMode = not Helper.isAnimationMode
+    @staticmethod
+    def reset():
+        Helper.isAnimationMode = False
+
     def lightPad(self,row:int,column:int,color,view:int, *args, **kwargs) -> None:
         """
         Light a pad using a specific row, column, and color. Row 1, Column 1 is Bottom Left Pad.
@@ -22,10 +31,13 @@ class Helper():
         * ColorRem: `Color Removal.` Default: `-1`.   NOTE: ONLY works for RGB/BGR inputs.
            * Format: `Launchpad X Palette` (0 to 127)
         """
+        if (Helper.isAnimationMode):
+            return
         if view == None:
             view = 0
         if (9 in [row, column]):
             view = -1
+        
         state = ""
         colorVib = ""
         colorRem = -1
@@ -201,14 +213,17 @@ class Helper():
         else:
             return ((faderPos-32)/95)
         
-    def clearPads(self,currentScreen:int) -> None: 
+    def clearPads(self,currentScreen:int,clearAll = False) -> None: 
         """
         Clears All Pads.
         ## Args:
         * `CurrentScreen`: `Current View`. (0: Session, 1: Note Mode/DAW Drum Rack, 13: DAW Fader, 127: Programmer Mode)
+        ## Optional Args:
+        * `ClearAll`: `Clears All` Pads and Arrows.
         """
-        for row in range(1,9):
-            for column in range(1,9):
+        bound = 10 if clearAll else 9
+        for row in range(1,bound):
+            for column in range(1,bound):
                 self.lightPad(row,column,"OFF",currentScreen)
 
 
@@ -233,6 +248,7 @@ class Helper():
                 best_palette_match_distance = distance
 
         return best_palette_match + 1
+
 
 
 colorVibrancy = {"DULL":-1, "NORMAL":0, "":0, "VIBRANT":1}
